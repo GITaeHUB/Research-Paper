@@ -68,7 +68,7 @@ def ping(h, q):
 @route("GET", r"/api/library")
 def get_library(h, q):
     library.scan()
-    return {"papers": [library.summary(k) for k in library.all_keys()], "usage": claude.usage(),
+    return {"papers": [library.summary(k) for k in library.all_keys()], "usage": claude.usage(), "limits": claude.limits(),
             "notion": bool(config.NOTION_TOKEN), "claude": bool(claude.find_claude())}
 
 
@@ -118,7 +118,7 @@ def post_figure(h, q, body, key):
 
 @route("GET", r"/api/jobs")
 def get_jobs(h, q):
-    return {"jobs": jobs.listing()}
+    return {"jobs": jobs.listing(), "usage": claude.usage(), "limits": claude.limits()}
 
 
 @route("GET", r"/api/search")
@@ -335,11 +335,12 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def _send(self, code, body, ctype="application/json; charset=utf-8", extra=None):
+        extra = dict(extra or {})
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        for k, v in (extra or {}).items():
+        self.send_header("Cache-Control", extra.pop("Cache-Control", "no-store"))
+        for k, v in extra.items():
             self.send_header(k, v)
         self.end_headers()
         if self.command != "HEAD":
@@ -402,7 +403,7 @@ class Handler(BaseHTTPRequestHandler):
             f = _fig_path(mt.group(1), mt.group(2)) if mt else None
             if not f or not f.is_file():
                 return self._json(404, {"error": "no figure"})
-            return self._file(f, "image/png")
+            return self._file(f, "image/png", cache=True)
         if path in ("/", ""):
             path = "/index.html"
         f = (config.WEB / path.lstrip("/")).resolve()
@@ -416,9 +417,10 @@ class Handler(BaseHTTPRequestHandler):
             ctype += "; charset=utf-8"
         self._file(f, ctype)
 
-    def _file(self, f, ctype):
-        """PDF 보기 창이 쪽을 나눠 받을 수 있게 Range 요청을 지원합니다."""
+    def _file(self, f, ctype, cache=False):
+        """PDF 보기 창이 쪽을 나눠 받을 수 있게 Range 요청을 지원합니다. cache = 브라우저가 하루 동안 다시 받지 않음 (그림)."""
         data = f.read_bytes()
+        cc = {"Cache-Control": "private, max-age=86400"} if cache else {}
         rng = self.headers.get("Range")
         m = re.match(r"bytes=(\d*)-(\d*)", rng or "")
         if m and (m.group(1) or m.group(2)):
@@ -428,8 +430,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 s, e = size - int(m.group(2)), size - 1
             e = min(e, size - 1)
-            return self._send(206, data[s:e + 1], ctype, {"Content-Range": "bytes {}-{}/{}".format(s, e, size), "Accept-Ranges": "bytes"})
-        self._send(200, data, ctype, {"Accept-Ranges": "bytes"})
+            return self._send(206, data[s:e + 1], ctype, dict(cc, **{"Content-Range": "bytes {}-{}/{}".format(s, e, size), "Accept-Ranges": "bytes"}))
+        self._send(200, data, ctype, dict(cc, **{"Accept-Ranges": "bytes"}))
 
     def do_GET(self):
         self._dispatch("GET")

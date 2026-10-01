@@ -4,8 +4,9 @@
 
 ## 설치 (처음 한 번)
 - 필요한 것: Windows 10/11 · **Python 3.8+** (외부 패키지 없음) · **VS Code + Claude Code 확장** (로그인되어 있어야 함) · **Git for Windows** (PDF 글 추출용 `pdftotext` 가 들어 있음) · Microsoft Edge 또는 Chrome
-- 받기: `git clone https://github.com/GITaeHUB/Research-Paper.git` → 폴더 안에서 `python rp.py shortcut`
-  → 바탕화면에 **Paper Reader** 바로가기가 아이콘(`assets/icon.ico`)까지 붙어서 만들어집니다. 프로그램 창 아이콘은 따로 할 것 없이 자동.
+- 받기: `git clone https://github.com/GITaeHUB/Research-Paper.git` → 폴더의 `논문리더.cmd` 더블클릭
+  → **처음 한 번** 바탕화면에 아이콘이 붙은 **Paper Reader** 바로가기가 자동으로 생깁니다. 그다음부터는 그 바로가기로 여세요.
+  (`.cmd` 파일은 자기 아이콘을 가질 수 없어 바로가기로 붙입니다. 지웠다가 다시 만들려면 `python rp.py shortcut`)
 - Notion 을 쓰려면 아래 "Notion 연결" 을 따라 `config.local.json` 을 만듭니다 (`config.local.example.json` 참고).
 - `papers/` · `library/` · `exports/` · `data/` 는 처음 실행할 때 자동으로 생깁니다. 개인 데이터라 Git 에는 올라가지 않습니다.
 
@@ -31,6 +32,8 @@
 ## 그 밖의 기능
 | 어디 | 기능 |
 |---|---|
+| 오른쪽 패널 | 왼쪽 경계를 끌어서 폭 조절, 두 번 누르면 넓게 ↔ 기본 |
+| 왼쪽 목록 | 자동으로 깜빡이며 바뀌지 않습니다. 새 PDF 를 넣었으면 `↻ 새로 고침` (작업이 끝나면 저절로 갱신) |
 | 그림 · 표 블록 | PDF 에서 그 그림만 잘라 번역 화면에 바로 보여 줌 (한 번 잘라 두면 저장되고 Notion 에도 이미지로 올라감). 누르면 오른쪽에 PDF 그 쪽 |
 | 질문 패널 | Claude 가 답을 쓰는 동안 실시간으로 보임 |
 | 번역 버튼 | 남은 단위 · 예상 시간 표시. 단위 2개씩 동시에 번역 (`tools/config.py` 의 `TRANSLATE_PARALLEL`) |
@@ -58,11 +61,12 @@
 ## 보안
 프로그램은 이 컴퓨터(127.0.0.1)에서만 열리고, 켤 때마다 새 비밀 토큰을 만들어 프로그램 창만 데이터에 접근할 수 있게 합니다 (다른 웹페이지가 몰래 요청할 수 없음). Notion 토큰은 `config.local.json` 에만 있고 Git 에 올라가지 않습니다.
 
-## 비용 (Claude 사용량)
+## Claude 사용량
 - 번역·분석 = Sonnet, 해설·Q&A·비교·계보도 = Opus. (`config.local.json` 의 `"models": {"translate": "opus"}` 처럼 바꿀 수 있음)
-- 표시되는 금액은 **같은 양을 API 정가로 샀다면** 얼마인지 환산한 값입니다. claude.ai 구독(Pro/Max)으로 로그인해 쓰면 호출마다 돈이 나가지 않고 구독의 사용량 한도에서 차감됩니다 (추가 사용량을 켜 둔 경우만 한도 초과분이 청구됨).
-- 대략 (정가 환산): 분석 ≈ $0.4 · 번역 단위당 ≈ $0.1 (30쪽 논문 전체 ≈ $2~3) · 해설 ≈ $1~2 · 질문 하나 ≈ $0.2~0.6.
-- 작업 버튼(오른쪽 위)에 지금까지의 호출 수와 추정 비용이 보입니다. 기록: `data/claude_log.jsonl`.
+- claude.ai 구독으로 로그인해 쓰면 호출마다 돈이 나가지 않고 **구독 사용 한도**에서 차감됩니다.
+- 위쪽 `사용량 N%` = 구독 **5시간 한도** 사용률 (Claude 가 응답마다 알려 주는 값, 누르면 주간 한도·초기화 시각).
+- 논문 머리와 작업 목록에 **토큰**(입력 / 출력)이 보입니다. 번역 버튼에는 남은 단위 · 예상 시간, 마우스를 올리면 예상 토큰.
+- 대략: 분석 1회 입력 ~40K · 번역 단위당 입력 ~30K / 출력 ~4K · 질문 하나 입력 50~150K (논문을 다시 읽는 양에 따라). 기록: `data/claude_log.jsonl`
 
 ## 명령줄 (`python rp.py ...`)
 | 명령 | 하는 일 |

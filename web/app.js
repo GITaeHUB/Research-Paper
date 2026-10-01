@@ -69,6 +69,15 @@ function inl(text) {
   return out + esc(text.slice(last));
 }
 
+// 토큰 수 짧게: 1234 → 1.2K, 1234567 → 1.23M
+function fmtTok(n) {
+  n = n || 0;
+  return n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 1 : 2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + "K" : String(n);
+}
+function usageText(u) {
+  return u ? `Claude ${u.calls}회 · 토큰 입력 ${fmtTok(u.tin)} / 출력 ${fmtTok(u.tout)}` : "";
+}
+
 const CHEV = '<svg class="chev" viewBox="0 0 20 20"><path d="M7 4l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const KIND = { qa: "Q&A", explain: "깊게 해설", figure: "그림 해설", equation: "수식 풀이" };
 const READING = { todo: "읽을 예정", reading: "읽는 중", done: "완료" };
@@ -78,7 +87,7 @@ const S = {
   papers: [], key: pref.get("key", null), paper: null, units: null,
   tab: pref.get("tab", "overview"), mode: pref.get("mode", "both"), filter: "all",
   view: "paper", anchor: null, qaOrder: "section", qaTag: null,
-  compareSel: new Set(), jobs: [], seenJobs: {}, pendingAsks: [], panel: "ask", usage: null,
+  compareSel: new Set(), jobs: [], seenJobs: {}, pendingAsks: [], panel: "ask", usage: null, lastDone: {}, figCache: {},
 };
 
 // ---------- 라이브러리 ----------
@@ -86,6 +95,8 @@ async function loadLibrary() {
   const d = await api.get("/api/library");
   S.papers = d.papers;
   S.usage = d.usage;
+  S.limits = d.limits;
+  renderLimits();
   S.notionReady = d.notion;
   if (!d.claude) $("#footNote").innerHTML = "⚠️ Claude 실행 파일을 찾지 못했습니다. VS Code 의 Claude Code 확장을 확인하세요.";
   renderLibrary();
@@ -93,6 +104,9 @@ async function loadLibrary() {
 
 function renderLibrary() {
   const list = $("#paperList");
+  const sig = JSON.stringify([S.papers, S.filter, S.key, S.view, [...S.compareSel]]);
+  if (sig === S.libSig) return;
+  S.libSig = sig;
   const items = S.papers.filter((p) => S.filter === "all" || (p.reading || "todo") === S.filter);
   if (!items.length) {
     list.innerHTML = `<div class="muted small" style="padding:20px 6px;text-align:center">${S.papers.length ? "이 분류에 논문이 없습니다" : "papers 폴더에 PDF 를 넣거나<br>아래에 arXiv 번호를 입력하세요"}</div>`;
@@ -227,7 +241,7 @@ function headerHtml(p) {
     actions.push(`<button class="btn primary" data-act="start" ${busyKinds.has("analyze") ? "disabled" : ""} title="분석 1~3분 → 해설(2~4분)과 번역이 동시에 진행됩니다">읽기 시작 — 분석 · 해설 · 번역</button>`);
   } else {
     const est = p.estimate || {};
-    if (done < total && !busyKinds.has("translate")) actions.push(`<button class="btn primary" data-act="translate" title="정가 환산 약 $${est.cost} (구독이면 사용량 한도에서 차감)">번역 ${done ? "계속" : "시작"} · ${est.left}단위 약 ${est.minutes}분</button>`);
+    if (done < total && !busyKinds.has("translate")) actions.push(`<button class="btn primary" data-act="translate" title="예상 토큰: 입력 ${fmtTok(est.tin)} · 출력 ${fmtTok(est.tout)}">번역 ${done ? "계속" : "시작"} · ${est.left}단위 약 ${est.minutes}분</button>`);
     if (!p.overview && !busyKinds.has("overview")) actions.push(`<button class="btn primary" data-act="overview">해설 만들기</button>`);
   }
   actions.push(`<button class="btn pearl" data-act="pdf">PDF 열기</button>`);
@@ -246,7 +260,7 @@ function headerHtml(p) {
     ${authors ? `<div class="authors">${esc(authors)}</div>` : ""}
     ${p.overview ? `<div class="one">${inl(p.overview.one_liner)}</div>` : m.abstract_ko ? `<div class="one">${inl(m.abstract_ko)}</div>` : ""}
     <div class="actions">${actions.join("")}</div>
-    ${total ? `<div class="prog"><span>번역 ${done}/${total}</span><div class="bar ${pct === 100 ? "done" : ""}"><i style="width:${pct}%"></i></div><span>Claude ${p.usage.calls}회 · 정가 환산 $${p.usage.cost}</span></div>` : ""}
+    ${total ? `<div class="prog"><span>번역 ${done}/${total}</span><div class="bar ${pct === 100 ? "done" : ""}"><i style="width:${pct}%"></i></div><span>${usageText(p.usage)}</span></div>` : ""}
     ${busy.map((j) => `<div class="pending" style="margin-top:10px"><span class="spinner"></span><b>${esc(j.label)}</b><span>${esc(j.message || "")}${j.n ? ` (${j.i}/${j.n})` : ""}</span>${j.kind === "translate" ? `<button class="btn ghost sm" data-stop="${j.id}" style="margin-left:auto">멈추기</button>` : ""}</div>`).join("")}
   </div>`;
 }
@@ -423,8 +437,9 @@ function setupFigures() {
 async function showFigure(box, key) {
   if (!box.isConnected || key !== S.key) return;
   const id = box.dataset.fig;
-  if (box.dataset.cached === "1") {
-    box.innerHTML = `<img src="${authUrl(`/fig/${encodeURIComponent(key)}/${encodeURIComponent(id)}.png`)}" alt="${esc(box.dataset.label)}">`;
+  const mem = S.figCache[key + "/" + id];
+  if (mem || box.dataset.cached === "1") {
+    box.innerHTML = `<img src="${mem || authUrl(`/fig/${encodeURIComponent(key)}/${encodeURIComponent(id)}.png`)}" alt="${esc(box.dataset.label)}">`;
     return;
   }
   try {
@@ -448,6 +463,7 @@ async function showFigure(box, key) {
     if (!box.isConnected) return;
     box.innerHTML = `<img src="${png}" alt="${esc(box.dataset.label)}">`;
     box.dataset.cached = "1";
+    S.figCache[key + "/" + id] = png;
     api.post(`/api/paper/${encodeURIComponent(key)}/figure`, { block: id, png }).then(() => {
       const b = (S.units || []).flatMap((u) => u.blocks).find((x) => x.id === id);
       if (b) b.fig = true;
@@ -564,6 +580,8 @@ function blockHtml(b, note, qas) {
     const fig = b.page ? `<div class="figbox" data-fig="${esc(b.id)}" data-page="${b.page}" data-label="${esc(b.label || "")}" data-type="${t}" data-cached="${b.fig ? 1 : 0}" title="누르면 오른쪽에 PDF ${b.page}쪽이 열립니다"><div class="fig-ph">그림 불러오는 중…</div></div>` : "";
     inner = `<div class="cap-h"><span class="pill">${esc(b.label || (t === "table" ? "Table" : "Figure"))}</span><button class="btn ghost sm" data-b="page">PDF ${b.page}쪽에서 보기</button></div>
       ${fig}<div class="orig">${inl(b.orig)}</div><div class="ko">${inl(b.ko)}</div>`;
+  } else if (t === "heading" && (b.ko || "").trim() === (b.orig || "").trim()) {
+    inner = `<div class="orig">${inl(b.orig)}</div>`;   // 제목이 번역해도 같으면 한 번만
   } else {
     inner = `<div class="orig">${inl(b.orig)}</div><div class="ko">${inl(b.ko)}</div>`;
   }
@@ -998,6 +1016,8 @@ async function pollJobs() {
   let d;
   try { d = await api.get("/api/jobs"); } catch (e) { pollTimer = setTimeout(pollJobs, 4000); return; }
   S.jobs = d.jobs;
+  if (d.usage) S.usage = d.usage;
+  if (d.limits) { S.limits = d.limits; renderLimits(); }
   const active = S.jobs.filter((j) => ["queued", "running"].includes(j.status));
   $("#jobsBtn .spinner").hidden = !active.length;
   $("#jobsLabel").textContent = active.length ? `작업 ${active.length}개 진행 중` : "작업 없음";
@@ -1017,8 +1037,8 @@ async function pollJobs() {
       if (j.kind === "compare" && S.view === "compare") renderCompare();
       if (j.kind === "global" && S.view === "global") renderGlobal();
     }
-    if (j.status === "running" && j.kind === "translate" && j.key === S.key && prev === "running" && S.lastMsg !== j.message) refreshPaper = true;
-    if (j.key === S.key && j.kind === "translate") S.lastMsg = j.message;
+    if (j.status === "running" && ["translate", "retranslate"].includes(j.kind) && j.key === S.key && S.lastDone[j.id] !== undefined && S.lastDone[j.id] !== j.i) refreshPaper = true;
+    if (["translate", "retranslate"].includes(j.kind)) S.lastDone[j.id] = j.i;
     S.seenJobs[j.id] = j.status;
   }
   if (!$("#jobsPop").hidden) renderJobsPop();
@@ -1051,7 +1071,10 @@ $("#jobsBtn").addEventListener("click", (e) => {
 document.addEventListener("click", (e) => { if (!e.target.closest("#jobsPop, #jobsBtn")) $("#jobsPop").hidden = true; });
 function renderJobsPop() {
   const p = $("#jobsPop");
-  const usage = S.usage ? `<div class="muted small" style="padding:8px 12px">지금까지 Claude ${S.usage.calls}회 · 정가 환산 $${S.usage.cost} (구독이면 실제 청구 없이 사용량 한도에서 차감)</div>` : "";
+  const L = S.limits || {};
+  const win = (w, name) => w ? `<div>${name} 한도 <b>${w.pct}%</b> 사용${w.resets ? ` · ${esc(w.resets)} 초기화` : ""}</div>` : "";
+  const usage = `<div class="muted small" style="padding:8px 12px;line-height:1.7">${S.usage ? esc(usageText(S.usage)) : ""}
+    ${win(L.five_hour, "5시간")}${win(L.seven_day, "주간")}${L.seen ? `<div style="color:var(--faint)">한도 정보: ${esc(L.seen)} 기준</div>` : ""}</div>`;
   p.innerHTML = (S.jobs.length ? S.jobs.map((j) => {
     const st = { queued: "대기", running: "진행 중", done: "완료", error: "실패", cancelled: "취소" }[j.status];
     const pct = j.n ? Math.round((j.i / j.n) * 100) : j.status === "done" ? 100 : 0;
@@ -1059,6 +1082,47 @@ function renderJobsPop() {
       <div class="m">${esc(j.status === "error" ? j.error : j.message || "")}</div>${["running", "queued"].includes(j.status) ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ""}</div>`;
   }).join("") : '<div class="muted small" style="padding:12px">최근 작업이 없습니다.</div>') + usage;
 }
+
+// ---------- 사용 한도 (Claude 구독 5시간 창) ----------
+function renderLimits() {
+  const pill = $("#limitPill");
+  const w = S.limits && S.limits.five_hour;
+  if (!w) { pill.hidden = true; return; }
+  pill.hidden = false;
+  pill.className = "limit-pill" + (w.pct >= 80 ? " high" : w.pct >= 50 ? " mid" : "");
+  pill.textContent = `사용량 ${w.pct}%`;
+  pill.title = `Claude 구독 5시간 한도 ${w.pct}% 사용${w.resets ? " · " + w.resets + " 초기화" : ""}` +
+    (S.limits.seven_day ? ` / 주간 ${S.limits.seven_day.pct}%` : "") + " — 누르면 자세히";
+}
+$("#limitPill").addEventListener("click", (e) => { e.stopPropagation(); $("#jobsPop").hidden = false; renderJobsPop(); });
+
+// ---------- 오른쪽 패널 폭 (끌어서 조절, 두 번 누르면 넓게 ↔ 기본) ----------
+const PANEL_DEFAULT = 520;
+function setPanelWidth(w, save) {
+  const max = Math.max(380, window.innerWidth - 300 - 520);   // 가운데 본문이 최소 520px 은 남게
+  w = Math.round(Math.min(Math.max(w, 360), max));
+  document.documentElement.style.setProperty("--panel-w", w + "px");
+  if (save) pref.set("panelW", w);
+  return w;
+}
+setPanelWidth(pref.get("panelW", PANEL_DEFAULT));
+(function () {
+  const sp = $("#splitter");
+  let dragging = false;
+  sp.addEventListener("mousedown", (e) => { dragging = true; document.body.classList.add("dragging"); e.preventDefault(); });
+  window.addEventListener("mousemove", (e) => { if (dragging) setPanelWidth(window.innerWidth - e.clientX, false); });
+  window.addEventListener("mouseup", (e) => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove("dragging");
+    setPanelWidth(window.innerWidth - e.clientX, true);
+  });
+  sp.addEventListener("dblclick", () => {
+    const cur = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--panel-w")) || PANEL_DEFAULT;
+    setPanelWidth(cur > PANEL_DEFAULT + 40 ? PANEL_DEFAULT : window.innerWidth * 0.45, true);
+  });
+  window.addEventListener("resize", () => setPanelWidth(pref.get("panelW", PANEL_DEFAULT), false));
+})();
 
 // ---------- 모달 ----------
 function modal(html) { $("#modalBody").innerHTML = html; $("#modal").hidden = false; }
@@ -1075,6 +1139,6 @@ async function boot() {
   if (S.key) await openPaper(S.key, { block: qs.get("block") || undefined, instant: true }); else renderMain();
   pollJobs();
   setInterval(() => api.get("/api/ping").catch(() => {}), 5000);
-  setInterval(() => { if (document.visibilityState === "visible") loadLibrary().catch(() => {}); }, 15000);
+  $("#reloadBtn").onclick = () => run(async () => { S.libSig = null; await loadLibrary(); toast("목록을 새로 고쳤습니다."); });
 }
 boot();

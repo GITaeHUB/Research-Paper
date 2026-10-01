@@ -113,14 +113,16 @@ def translate(key, progress=_noop, only=None, include_appendix=True, stop=None):
 
 
 def estimate(key):
-    """남은 번역의 예상 시간·사용량 (지금까지의 번역 기록 평균, 기록이 없으면 단위당 50초 · $0.1)."""
+    """남은 번역의 예상 시간·토큰 (지금까지의 번역 기록 평균, 기록이 없으면 단위당 50초 · 입력 30K · 출력 4K 토큰)."""
     m = library.load_meta(key) or {}
     left = sum(1 for u in m.get("units", []) if u.get("kind") != "references" and u.get("status") != "done")
     logs = [x for x in read_jsonl(claude.LOG_FILE) if x.get("kind") == "translate" and x.get("ok")][-40:]
     sec = sum(x["sec"] for x in logs) / len(logs) if logs else 50.0
-    cost = sum(x["cost"] for x in logs) / len(logs) if logs else 0.1
+    tl = [x for x in logs if x.get("tin")]
+    tin = sum(x["tin"] for x in tl) / len(tl) if tl else 30000
+    tout = sum(x["tout"] for x in tl) / len(tl) if tl else 4000
     par = max(1, int(config.TRANSLATE_PARALLEL))
-    return {"left": left, "minutes": int(round(left * sec / par / 60.0 + 0.49)), "cost": round(left * cost, 2)}
+    return {"left": left, "minutes": int(round(left * sec / par / 60.0 + 0.49)), "tin": int(left * tin), "tout": int(left * tout)}
 
 
 def _set_unit_status(key, i, status, err=""):

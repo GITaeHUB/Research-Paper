@@ -28,23 +28,8 @@ def prog(i, n, msg):
 
 
 def shortcut():
-    """바탕화면에 'Paper Reader' 바로가기 (pythonw 로 rp_app.pyw 실행, 콘솔 창 없음)."""
-    import os
-    import shutil
-    import subprocess
-    from pathlib import Path
-    root = Path(__file__).resolve().parent
-    pyw = shutil.which("pythonw") or sys.executable
-    desktop = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop"
-    lnk = desktop / "Paper Reader.lnk"
-    ico = root / "assets" / "icon.ico"
-    ps = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{lnk}');$s.TargetPath='{exe}';"
-          "$s.Arguments='\"{pyw}\"';$s.WorkingDirectory='{root}';$s.IconLocation='{icon},0';$s.Save()").format(
-        lnk=str(lnk).replace("'", "''"), exe=pyw.replace("'", "''"), pyw=str(root / "rp_app.pyw").replace("'", "''"),
-        root=str(root).replace("'", "''"),
-        icon=str(ico).replace("'", "''") if ico.exists() else os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "imageres.dll"))
-    subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=True)
-    print("바탕화면에 만들었습니다:", lnk)
+    from tools import shortcut as sc
+    print("바탕화면에 만들었습니다:", sc.create())
 
 
 def main(argv=None):

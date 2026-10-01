@@ -138,6 +138,8 @@ def run(prompt, kind, schema=None, tools=(), session_id=None, resume=None, key=N
             t = d.get("type")
             if t == "result":
                 res = d
+            elif t == "rate_limit_event":
+                _save_limits(d.get("rate_limit_info") or {})
             elif t == "stream_event" and on_text:
                 ev = d.get("event") or {}
                 et = ev.get("type")
@@ -169,7 +171,7 @@ def run(prompt, kind, schema=None, tools=(), session_id=None, resume=None, key=N
         err = (errbuf[0] if errbuf else b"").decode("utf-8", "replace").strip()
         detail = (res or {}).get("result") if isinstance(res, dict) else None
         msg = " / ".join(x for x in [detail or "", err[-400:], "" if res else " ".join(tail)[-300:]] if x)
-        _log(kind, model, key, time.time() - t0, (res or {}).get("total_cost_usd") if isinstance(res, dict) else None, False, msg[:300])
+        _log(kind, model, key, time.time() - t0, res if isinstance(res, dict) else None, False, msg[:300])
         low = msg.lower()
         if "login" in low or "auth" in low or "credential" in low:
             msg += " — VS Code 에서 Claude 창을 한 번 열어 로그인되어 있는지 확인하세요."
@@ -180,9 +182,9 @@ def run(prompt, kind, schema=None, tools=(), session_id=None, resume=None, key=N
     if schema and data is None:
         data = _parse_json(text)
         if data is None:
-            _log(kind, model, key, time.time() - t0, res.get("total_cost_usd"), False, "no structured output")
+            _log(kind, model, key, time.time() - t0, res, False, "no structured output")
             raise ClaudeError("Claude 의 답을 정해진 형식으로 읽지 못했습니다. 다시 시도해 주세요.")
-    _log(kind, model, key, time.time() - t0, res.get("total_cost_usd"), True, "")
+    _log(kind, model, key, time.time() - t0, res, True, "")
     return {"data": data, "text": text, "session_id": res.get("session_id"), "cost": res.get("total_cost_usd") or 0}
 
 
@@ -196,18 +198,57 @@ def _parse_json(text):
         return None
 
 
-def _log(kind, model, key, sec, cost, ok, err):
+def _log(kind, model, key, sec, res, ok, err):
+    """호출 기록: 토큰(입력 = 새 입력 + 캐시 쓰기 + 캐시 읽기, 출력) · 시간 · 정가 환산 비용(참고용)."""
+    u = (res or {}).get("usage") or {}
+    tin = (u.get("input_tokens") or 0) + (u.get("cache_creation_input_tokens") or 0) + (u.get("cache_read_input_tokens") or 0)
     append_jsonl(LOG_FILE, {"ts": now_str(), "kind": kind, "model": model, "key": key, "sec": round(sec, 1),
-                            "cost": round(cost or 0, 4), "ok": ok, "err": err})
+                            "tin": tin, "tcache": u.get("cache_read_input_tokens") or 0, "tout": u.get("output_tokens") or 0,
+                            "cost": round((res or {}).get("total_cost_usd") or 0, 4), "ok": ok, "err": err})
+
+
+LIMITS_FILE = config.DATA / "limits.json"
+
+
+def _save_limits(info):
+    """구독 사용 한도 상태 (Claude 가 응답마다 알려 주는 5시간·주간 사용률)."""
+    if not info:
+        return
+    from .utils import save_json
+    info = dict(info)
+    info["seen"] = now_str()
+    try:
+        save_json(LIMITS_FILE, info)
+    except OSError:
+        pass
+
+
+def limits():
+    """{"five_hour": {"pct": 27, "resets": "18:30"}, "seven_day": {...}, "seen": ...} 또는 None"""
+    from .utils import load_json
+    import datetime
+    d = load_json(LIMITS_FILE, None)
+    if not d:
+        return None
+    out = {"seen": d.get("seen"), "status": d.get("status")}
+    for name, w in (d.get("unifiedWindows") or {}).items():
+        if not isinstance(w, dict) or w.get("utilization") is None:
+            continue
+        r = w.get("resetsAt")
+        out[name] = {"pct": int(round(float(w["utilization"]) * 100)),
+                     "resets": datetime.datetime.fromtimestamp(r).strftime("%m-%d %H:%M") if r else ""}
+    return out
 
 
 def usage(key=None):
-    """지금까지의 호출 횟수와 추정 비용 (정가 기준. 구독이면 사용량 한도에서 차감됩니다)."""
+    """호출 횟수와 토큰 합계. 토큰은 기록을 시작한 뒤의 호출만 셉니다."""
     from .utils import read_jsonl
-    n, cost = 0, 0.0
+    n, tin, tout, cache = 0, 0, 0, 0
     for it in read_jsonl(LOG_FILE):
         if key and it.get("key") != key:
             continue
         n += 1
-        cost += it.get("cost") or 0
-    return {"calls": n, "cost": round(cost, 2)}
+        tin += it.get("tin") or 0
+        tout += it.get("tout") or 0
+        cache += it.get("tcache") or 0
+    return {"calls": n, "tin": tin, "tout": tout, "tcache": cache}

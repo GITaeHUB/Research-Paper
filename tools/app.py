@@ -48,6 +48,8 @@ def open_window(url):
 
 
 def main():
+    from . import shortcut
+    shortcut.create_once()   # 처음 열 때 바탕화면 바로가기 (아이콘 포함) 를 한 번 만들어 둠
     url = "http://{}:{}/".format(config.HOST, config.PORT)
     if _port_open(config.PORT):
         open_window(url)
