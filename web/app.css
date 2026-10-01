@@ -501,3 +501,25 @@ body.dragging-paper .fold-empty, .fold-b:only-child .fold-empty { display: block
 .folder-sel { font: inherit; font-size: 13px; font-weight: 600; color: var(--ink2); background: var(--pearl); border: 0; border-radius: 980px;
   padding: 6px 12px; cursor: pointer; outline: none; }
 .folder-sel:hover { background: var(--pearl-hover); }
+
+/* ---------- 좁은 본문 칸 (오른쪽 패널을 넓히거나 작은 화면) ---------- */
+/* 버튼 · 탭 · 알약 글자는 절대 꺾이지 않게, 모자라면 묶음째 다음 줄로 */
+.btn, .seg button, .tabs button, .chip, .pill, .folder-sel, .fold-count, .sum-del { white-space: nowrap; flex-shrink: 0; }
+.seg { flex-shrink: 0; }
+.tabs { flex-wrap: wrap; row-gap: 8px; }
+.phead .badges { row-gap: 6px; }
+.unit-h h2 { min-width: 0; }
+/* 가운데 칸의 실제 폭을 기준으로 배치 바꾸기 */
+.main { container-type: inline-size; }
+@container (max-width: 980px) {
+  .reader { grid-template-columns: minmax(0, 1fr); }
+  .toc { display: none; }
+  .grid2 { grid-template-columns: 1fr; }
+}
+@container (max-width: 760px) {
+  .wrap { padding: 20px 18px 60px; }
+  .tabs { margin: 0 -18px 16px; padding: 8px 18px; }
+  .phead h1 { font-size: 23px; }
+  .card { padding: 18px 18px; }
+  .blk { padding: 14px 14px; }
+}
