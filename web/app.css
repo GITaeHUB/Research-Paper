@@ -523,3 +523,8 @@ body.dragging-paper .fold-empty, .fold-b:only-child .fold-empty { display: block
   .card { padding: 18px 18px; }
   .blk { padding: 14px 14px; }
 }
+
+/* ---------- 최소 창 크기: 이보다 작아지면 배치를 더 줄이지 않고 스크롤 (왼쪽 300 + 본문 520 + 패널 360 + 여유) ---------- */
+html { overflow: auto; }
+body { min-width: 1200px; min-height: 700px; }
+.shell { min-height: 640px; }

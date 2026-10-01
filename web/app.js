@@ -1485,6 +1485,22 @@ $("#themeBtn").addEventListener("click", () => {
   applyTheme(t);
 });
 
+// ---------- 최소 창 크기: 창을 이보다 작게 줄이면 다시 늘림 (Edge 앱 창은 페이지가 자기 창 크기를 바꿀 수 있음) ----------
+const MIN_W = 1200, MIN_H = 700;
+let minTimer = null;
+function keepMinSize() {
+  clearTimeout(minTimer);
+  minTimer = setTimeout(() => {   // 끌어서 줄이는 동안이 아니라 손을 뗀 뒤에 한 번
+    const w = window.innerWidth, h = window.innerHeight;
+    if (w >= MIN_W && h >= MIN_H) return;
+    try {
+      window.resizeTo(window.outerWidth + Math.max(0, MIN_W - w), window.outerHeight + Math.max(0, MIN_H - h));
+    } catch (e) { /* 일반 브라우저 탭에서는 막혀 있음 — 그때는 CSS 최소 크기 + 스크롤로 버팀 */ }
+  }, 250);
+}
+window.addEventListener("resize", keepMinSize);
+keepMinSize();
+
 // ---------- 사용 한도 (Claude 구독 5시간 창) ----------
 function renderLimits() {
   const pill = $("#limitPill");
