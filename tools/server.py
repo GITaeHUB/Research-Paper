@@ -68,7 +68,8 @@ def ping(h, q):
 @route("GET", r"/api/library")
 def get_library(h, q):
     library.scan()
-    return {"papers": [library.summary(k) for k in library.all_keys()], "usage": claude.usage(), "limits": claude.limits(),
+    return {"papers": [library.summary(k) for k in library.all_keys()], "folders": library.load_folders()["folders"],
+            "usage": claude.usage(), "limits": claude.limits(),
             "notion": bool(config.NOTION_TOKEN), "claude": bool(claude.find_claude())}
 
 
@@ -295,6 +296,17 @@ def post_open(h, q, body, key):
     else:
         os.startfile(str(exporter.export(key)))  # noqa: S606
     return {"ok": True}
+
+
+@route("POST", r"/api/folders")
+def post_folders(h, q, body):
+    if body.get("key"):
+        _key(body["key"])
+    try:
+        d = library.folder_action(body)
+    except ValueError as e:
+        raise ApiError(str(e))
+    return {"folders": d["folders"]}
 
 
 @route("POST", r"/api/comparisons/delete")

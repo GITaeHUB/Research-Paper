@@ -94,6 +94,7 @@ const S = {
 async function loadLibrary() {
   const d = await api.get("/api/library");
   S.papers = d.papers;
+  S.folders = d.folders || [];
   S.usage = d.usage;
   S.limits = d.limits;
   renderLimits();
@@ -104,7 +105,7 @@ async function loadLibrary() {
 
 function renderLibrary() {
   const list = $("#paperList");
-  const sig = JSON.stringify([S.papers, S.filter, S.key, S.view, [...S.compareSel]]);
+  const sig = JSON.stringify([S.papers, S.folders, S.filter, S.key, S.view, [...S.compareSel], pref.get("foldClosed", [])]);
   if (sig === S.libSig) return;
   S.libSig = sig;
   const items = S.papers.filter((p) => S.filter === "all" || (p.reading || "todo") === S.filter);
@@ -113,20 +114,92 @@ function renderLibrary() {
     return;
   }
   const comparing = S.view === "compare";
-  list.innerHTML = items.map((p) => {
+  const card = (p) => {
     const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
     const status = p.status === "new" ? '<span class="pill amber">새 논문</span>'
       : p.missing ? '<span class="pill red">PDF 없음</span>' : "";
     const r = p.reading || "todo";
-    return `<div class="pcard r-${r} ${p.key === S.key && S.view === "paper" ? "on" : ""} ${p.missing ? "missing" : ""}" data-key="${esc(p.key)}">
+    return `<div class="pcard r-${r} ${p.key === S.key && S.view === "paper" ? "on" : ""} ${p.missing ? "missing" : ""}" data-key="${esc(p.key)}" draggable="true">
       ${comparing ? `<input type="checkbox" class="cmp" ${S.compareSel.has(p.key) ? "checked" : ""}>` : ""}
       <div class="row">${p.venue ? `<span class="pill venue">${esc(p.venue)} ${esc(p.year)}</span>` : ""}${p.short ? `<b style="color:var(--ink)">${esc(p.short)}</b>` : ""}${status}</div>
       <div class="t">${esc(p.title)}</div>
       <div class="row"><span class="pill r-${r}">${READING[r]}</span>${p.total ? `번역 ${p.done}/${p.total}` : "분석 전"} · Q&A ${p.qa}</div>
       ${p.total ? `<div class="bar ${pct === 100 ? "done" : ""}"><i style="width:${pct}%"></i></div>` : ""}
     </div>`;
-  }).join("");
+  };
+  // 가상 폴더별로 묶어서: 폴더 순서대로, 마지막에 미분류
+  const closed = new Set(pref.get("foldClosed", []));
+  const groups = (S.folders || []).map((f) => ({ id: f.id, name: f.name, items: items.filter((p) => p.folder === f.id) }));
+  const known = new Set(groups.map((g) => g.id));
+  const loose = items.filter((p) => !p.folder || !known.has(p.folder));
+  const head = (g) => `<div class="fold-h ${closed.has(g.id) ? "closed" : ""}" data-folder="${esc(g.id)}">
+      <svg class="fchev" viewBox="0 0 20 20" width="12" height="12"><path d="M5 7l5 6 5-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="fname">${esc(g.name)}</span><span class="fcount">${g.items.length}</span>
+      ${g.id ? `<span class="fact"><button data-frename="${esc(g.id)}">이름</button><button data-fdel="${esc(g.id)}">삭제</button></span>` : ""}</div>`;
+  const body = (g) => `<div class="fold-b ${closed.has(g.id) ? "closed" : ""}" data-folder="${esc(g.id)}">${g.items.map(card).join("") || '<div class="fold-empty">논문 카드를 여기로 끌어다 놓으세요</div>'}</div>`;
+  const all = groups.concat(S.folders && S.folders.length ? [{ id: "", name: "미분류", items: loose }] : []);
+  list.innerHTML = (S.folders && S.folders.length ? all.map((g) => head(g) + body(g)).join("") : items.map(card).join(""))
+    + `<button class="btn ghost sm add-folder" id="addFolder">+ 새 폴더</button>`;
 }
+
+// ---------- 폴더: 만들기 · 이름 · 삭제 · 접기 · 끌어다 놓기 ----------
+async function folderApi(body) {
+  const d = await api.post("/api/folders", body);
+  S.folders = d.folders;
+  S.libSig = null;
+  await loadLibrary();
+  if (S.paper) { const ph = $(".phead"); if (ph) ph.outerHTML = headerHtml(S.paper); }
+}
+async function newFolder(key) {
+  const name = prompt("새 폴더 이름 (예: BEV Perception, Motion Forecasting, 읽을 후보)");
+  if (name && name.trim()) await run(() => folderApi({ action: "create", name: name.trim(), key }));
+}
+$("#paperList").addEventListener("click", async (e) => {
+  if (e.target.closest("#addFolder")) return newFolder();
+  const rn = e.target.closest("[data-frename]");
+  if (rn) {
+    const f = S.folders.find((x) => x.id === rn.dataset.frename);
+    const name = prompt("폴더 이름", f ? f.name : "");
+    if (name && name.trim()) await run(() => folderApi({ action: "rename", id: rn.dataset.frename, name: name.trim() }));
+    return;
+  }
+  const dl = e.target.closest("[data-fdel]");
+  if (dl) {
+    if (confirm("이 폴더를 지울까요? 안의 논문은 지워지지 않고 '미분류' 로 돌아갑니다.")) await run(() => folderApi({ action: "delete", id: dl.dataset.fdel }));
+    return;
+  }
+  const fh = e.target.closest(".fold-h");
+  if (fh) {
+    const set = new Set(pref.get("foldClosed", []));
+    const id = fh.dataset.folder;
+    if (set.has(id)) set.delete(id); else set.add(id);
+    pref.set("foldClosed", [...set]);
+    renderLibrary();
+  }
+});
+$("#paperList").addEventListener("dragstart", (e) => {
+  const c = e.target.closest(".pcard");
+  if (!c) return;
+  e.dataTransfer.setData("text/rp-key", c.dataset.key);
+  e.dataTransfer.effectAllowed = "move";
+  document.body.classList.add("dragging-paper");
+});
+$("#paperList").addEventListener("dragend", () => { document.body.classList.remove("dragging-paper"); $$(".drop-on").forEach((x) => x.classList.remove("drop-on")); });
+$("#paperList").addEventListener("dragover", (e) => {
+  const t = e.target.closest("[data-folder]");
+  if (!t || !e.dataTransfer.types.includes("text/rp-key")) return;
+  e.preventDefault();
+  $$(".drop-on").forEach((x) => x !== t && x.classList.remove("drop-on"));
+  t.classList.add("drop-on");
+});
+$("#paperList").addEventListener("drop", async (e) => {
+  const t = e.target.closest("[data-folder]");
+  const key = e.dataTransfer.getData("text/rp-key");
+  $$(".drop-on").forEach((x) => x.classList.remove("drop-on"));
+  if (!t || !key) return;
+  e.preventDefault();
+  await run(() => folderApi({ action: "move", key, id: t.dataset.folder || null }));
+});
 
 $("#paperList").addEventListener("click", (e) => {
   const card = e.target.closest(".pcard");
@@ -254,6 +327,9 @@ function headerHtml(p) {
       ${m.task ? `<span class="pill">${esc(m.task)}</span>` : ""}
       ${(m.keywords || []).slice(0, 5).map((k) => `<span class="pill gray">${esc(k)}</span>`).join("")}
       <span style="flex:1"></span>
+      <select id="folderSel" class="folder-sel" title="이 논문의 폴더 (실제 파일 위치는 그대로)">
+        <option value="">미분류</option>${(S.folders || []).map((f) => `<option value="${esc(f.id)}" ${((S.papers.find((x) => x.key === m.key) || {}).folder === f.id) ? "selected" : ""}>${esc(f.name)}</option>`).join("")}
+        <option value="__new">+ 새 폴더…</option></select>
       <div class="seg" id="readingSeg">${Object.entries(READING).map(([k, v]) => `<button data-r="${k}" class="${(m.reading || "todo") === k ? "on" : ""}">${v}</button>`).join("")}</div>
     </div>
     <h1>${esc(m.title)}</h1>
@@ -965,9 +1041,11 @@ function renderGlossary(el) {
     <div style="display:flex;gap:8px"><button class="btn pearl" id="glAdd">＋ 용어</button><button class="btn primary" id="glSave">저장</button></div></div>
     <div class="card" style="padding:10px 14px"><table class="tbl gl-table"><tr><th style="width:36px"></th><th style="width:30%">원어</th><th style="width:26%">번역 표기</th><th>뜻</th></tr>
     ${terms.map((t) => glRow(t)).join("")}</table></div>`;
-  $("#glAdd").onclick = () => { $(".gl-table tbody").insertAdjacentHTML("beforeend", glRow({ en: "", ko: "", note: "" })); $(".gl-table tr:last-child input").focus(); };
+  $("#glAdd").onclick = () => { $(".gl-table tbody").insertAdjacentHTML("beforeend", glRow({ en: "", ko: "", note: "" })); $(".gl-table tr:last-child textarea").focus(); };
+  fitTextareas(el);
+  el.querySelector(".gl-table").addEventListener("input", (e) => { if (e.target.tagName === "TEXTAREA") fitTextareas(e.target.parentElement); });
   $("#glSave").onclick = async () => {
-    const rows = $$(".gl-table tr").slice(1).map((tr) => { const [en, ko, note] = $$("input", tr).map((i) => i.value); return { en, ko, note, star: $(".star", tr).classList.contains("on") }; });
+    const rows = $$(".gl-table tr").slice(1).map((tr) => { const [en, ko, note] = $$("textarea", tr).map((i) => i.value.replace(/\s*\n\s*/g, " ").trim()); return { en, ko, note, star: $(".star", tr).classList.contains("on") }; });
     await run(async () => {
       const d = await api.post(`/api/paper/${S.key}/glossary`, { terms: rows, to_global: rows.filter((r) => r.star && r.en) });
       S.paper.glossary = d.terms;
@@ -978,7 +1056,12 @@ function renderGlossary(el) {
   el.querySelector(".gl-table").addEventListener("click", (e) => { const s = e.target.closest(".star"); if (s) s.classList.toggle("on"); });
 }
 function glRow(t) {
-  return `<tr><td><button class="star" title="공용 용어집에도 넣기">★</button></td><td><input value="${esc(t.en)}" placeholder="영어"></td><td><input value="${esc(t.ko)}" placeholder="번역 표기"></td><td><input value="${esc(t.note)}" placeholder="한 줄 뜻"></td></tr>`;
+  // 칸은 여러 줄 입력칸: 긴 설명은 저절로 줄이 바뀌고 높이가 내용에 맞게 늘어남
+  const cell = (v, ph) => `<td><textarea rows="1" placeholder="${ph}">${esc(v)}</textarea></td>`;
+  return `<tr><td><button class="star" title="공용 용어집에도 넣기">★</button></td>${cell(t.en, "영어")}${cell(t.ko, "번역 표기")}${cell(t.note, "뜻")}</tr>`;
+}
+function fitTextareas(root) {
+  $$("textarea", root).forEach((ta) => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; });
 }
 
 // ---------- 메모 ----------
@@ -1443,3 +1526,12 @@ async function boot() {
   $("#reloadBtn").onclick = () => run(async () => { S.libSig = null; await loadLibrary(); toast("목록을 새로 고쳤습니다."); });
 }
 boot();
+
+// 논문 머리의 폴더 고르기
+document.addEventListener("change", async (e) => {
+  if (e.target.id !== "folderSel" || !S.key) return;
+  const v = e.target.value;
+  if (v === "__new") { await newFolder(S.key); return; }
+  await run(() => folderApi({ action: "move", key: S.key, id: v || null }));
+  toast(v ? "폴더로 옮겼습니다." : "미분류로 옮겼습니다.");
+});

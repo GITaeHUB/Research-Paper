@@ -223,4 +223,58 @@ def summary(key):
             "venue": m.get("venue") or "", "year": m.get("year") or "", "keywords": m.get("keywords", []),
             "task": m.get("task") or "", "status": m.get("status"), "reading": m.get("reading", "todo"),
             "done": done, "total": total, "qa": sum(1 for q in qa if q.get("kind") == "qa"), "missing": m.get("missing", False),
-            "has_overview": (paper_dir(key) / "overview.json").exists(), "added": m.get("added"), "pdf": m.get("pdf")}
+            "has_overview": (paper_dir(key) / "overview.json").exists(), "added": m.get("added"), "pdf": m.get("pdf"),
+            "folder": load_folders()["assign"].get(key)}
+
+
+# ---------- 가상 폴더 (실제 파일 위치는 그대로, 프로그램 안에서만 묶어 보기) ----------
+FOLDERS_FILE = config.DATA / "folders.json"   # {"folders": [{"id", "name"}], "assign": {key: folder_id}}
+
+
+def load_folders():
+    d = load_json(FOLDERS_FILE, None) or {}
+    d.setdefault("folders", [])
+    d.setdefault("assign", {})
+    return d
+
+
+def folder_action(body):
+    """create {name} · rename {id, name} · delete {id} · move {key, id 또는 null} · order {ids}"""
+    import uuid
+    act = body.get("action")
+    with LOCK:
+        d = load_folders()
+        if act == "create":
+            name = (body.get("name") or "").strip()[:60]
+            if not name:
+                raise ValueError("폴더 이름을 입력해 주세요.")
+            fid = uuid.uuid4().hex[:8]
+            d["folders"].append({"id": fid, "name": name})
+            if body.get("key"):
+                d["assign"][body["key"]] = fid
+        elif act == "rename":
+            for f in d["folders"]:
+                if f["id"] == body.get("id"):
+                    f["name"] = (body.get("name") or f["name"]).strip()[:60] or f["name"]
+        elif act == "delete":   # 폴더만 지움 — 안의 논문은 미분류로
+            d["folders"] = [f for f in d["folders"] if f["id"] != body.get("id")]
+            d["assign"] = {k: v for k, v in d["assign"].items() if v != body.get("id")}
+        elif act == "move":
+            fid = body.get("id")
+            if fid and fid in {f["id"] for f in d["folders"]}:
+                d["assign"][body["key"]] = fid
+            else:
+                d["assign"].pop(body.get("key"), None)
+        elif act == "order":
+            pos = {fid: n for n, fid in enumerate(body.get("ids", []))}
+            d["folders"].sort(key=lambda f: pos.get(f["id"], 10 ** 6))
+        else:
+            raise ValueError("알 수 없는 폴더 작업: {}".format(act))
+        save_json(FOLDERS_FILE, d)
+    return d
+
+
+def folder_name(key):
+    d = load_folders()
+    fid = d["assign"].get(key)
+    return next((f["name"] for f in d["folders"] if f["id"] == fid), "")

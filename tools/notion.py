@@ -451,6 +451,7 @@ def ensure_database(state):
             "한 줄 요약": {"rich_text": {}},
             "arXiv": {"url": {}},
             "동기화": {"date": {}},
+            "폴더": {"select": {}},
         },
     })
     state["database_id"] = res["id"]
@@ -481,6 +482,8 @@ def _props(key):
         p["연도"] = {"number": int(year[0])}
     if m.get("arxiv_id"):
         p["arXiv"] = {"url": "https://arxiv.org/abs/" + m["arxiv_id"]}
+    folder = library.folder_name(key)
+    p["폴더"] = {"select": {"name": folder.replace(",", " ")[:90]} if folder else None}
     return p
 
 
@@ -498,6 +501,14 @@ def sync(key, progress=lambda *a: None):
         state = load_json(STATE, {}) or {}
     progress(0, 6, "데이터베이스 확인 중")
     db = ensure_database(state)
+    if not state.get("has_folder_prop"):   # 예전에 만든 데이터베이스에 '폴더' 속성 더하기 (한 번)
+        _req("PATCH", "databases/" + db, {"properties": {"폴더": {"select": {}}}})
+        state["has_folder_prop"] = True
+        with LOCK:
+            cur = load_json(STATE, {}) or {}
+            cur["has_folder_prop"] = True
+            cur["database_id"] = db
+            save_json(STATE, cur)
     info = (state.get("pages") or {}).get(key) or {}
 
     page_id = info.get("page_id")

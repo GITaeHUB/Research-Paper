@@ -471,3 +471,33 @@ details.qa > summary:hover .sum-del { opacity: 1; }
 /* 코드 탭: 저장소 고르기 */
 .code-pick .field-row { align-items: center; }
 .code-pick .field { flex: 1; }
+
+/* 용어집: 긴 설명은 줄바꿈 */
+.gl-table textarea { background: transparent; border: 1.5px solid transparent; border-radius: 8px; padding: 5px 8px; font: inherit; width: 100%;
+  outline: none; resize: none; overflow: hidden; line-height: 1.5; min-height: 32px; white-space: pre-wrap; word-break: break-word; }
+.gl-table textarea:focus { border-color: #80b3f5; background: var(--surface); }
+.gl-table td { vertical-align: top; }
+
+/* 가상 폴더 */
+.fold-h { display: flex; align-items: center; gap: 6px; padding: 8px 6px 6px; margin-top: 4px; cursor: pointer; border-radius: 8px; user-select: none; }
+.fold-h:hover { background: var(--pearl-hover); }
+.fold-h .fchev { color: var(--muted); transition: transform .2s; flex: none; }
+.fold-h.closed .fchev { transform: rotate(-90deg); }
+.fold-h .fname { font-weight: 700; font-size: 13px; color: var(--ink2); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fold-h .fcount { font-size: 12px; color: var(--faint); font-weight: 600; }
+.fold-h .fact { display: none; gap: 2px; }
+.fold-h:hover .fact { display: inline-flex; }
+.fold-h .fact button { border: 0; background: transparent; font-size: 12px; color: var(--muted); padding: 1px 5px; border-radius: 5px; cursor: pointer; }
+.fold-h .fact button:hover { background: var(--pearl); color: var(--ink); }
+.fold-h .fact button[data-fdel]:hover { color: var(--red); background: var(--red-soft); }
+.fold-b { padding: 2px 0 4px 6px; border-left: 2px solid var(--line2); margin-left: 9px; min-height: 8px; border-radius: 0 0 0 6px; }
+.fold-b.closed { display: none; }
+.fold-empty { font-size: 12px; color: var(--faint); padding: 8px 6px; display: none; }
+body.dragging-paper .fold-empty, .fold-b:only-child .fold-empty { display: block; }
+.fold-b .fold-empty:only-child { display: block; }
+.drop-on { background: var(--accent-soft) !important; outline: 2px dashed var(--accent); outline-offset: -2px; }
+.add-folder { margin: 8px 2px 4px; }
+.pcard[draggable="true"] { cursor: pointer; }
+.folder-sel { font: inherit; font-size: 13px; font-weight: 600; color: var(--ink2); background: var(--pearl); border: 0; border-radius: 980px;
+  padding: 6px 12px; cursor: pointer; outline: none; }
+.folder-sel:hover { background: var(--pearl-hover); }
