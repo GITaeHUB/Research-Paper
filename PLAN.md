@@ -12,7 +12,7 @@
 | 답변 | 연구자 수준으로 정확하게, 풀어서 설명 (텐서 shape·데이터 흐름·수식 전개). 일상 비유 금지 |
 | 모델 | 번역·분석 = Sonnet, 해설·Q&A·비교 = Opus (`tools/config.py`) |
 | 문서 | 데이터 원본은 `library/<논문>/*.json`, 사람이 읽는 마크다운은 `exports/` 에 자동 생성 |
-| Notion | 버튼 눌렀을 때만, Notion 통합 토큰(REST API, 무료). 부모 페이지: Kim Gitae / IVSP / Research Paper |
+| Notion | 버튼 눌렀을 때만, Notion 통합 토큰(REST API, 무료). 부모 페이지는 `config.local.json` 의 `notion_parent` |
 
 ## 화면
 ```

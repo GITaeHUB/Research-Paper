@@ -147,6 +147,7 @@ web/         화면
 ```
 
 자세한 구조와 번역 · 답변 규칙은 [`CLAUDE.md`](CLAUDE.md), 개발 기록은 [`PLAN.md`](PLAN.md).
+함께 들어 있는 외부 라이브러리(marked · KaTeX · Mermaid · PDF.js)의 라이선스는 [`web/vendor/THIRD_PARTY_NOTICES.md`](web/vendor/THIRD_PARTY_NOTICES.md).
 
 <details>
 <summary><sub>명령줄 (선택 — 프로그램 창으로 다 할 수 있습니다)</sub></summary>
