@@ -26,6 +26,12 @@ MODELS = {
     "global": "opus",
 }
 
+# 생각(thinking)을 얼마나 할지: 낮을수록 출력 토큰 절약. 번역·분석은 낮게, 해설·Q&A 는 기본(None = Claude 기본값)
+EFFORT = {"translate": "low", "analyze": "medium"}
+
+# Q&A 세션 압축: 세션의 입력 토큰이 이만큼 넘으면 다음 질문은 지난 Q&A 요약만 들고 새 세션으로 시작
+QA_SESSION_LIMIT = 120000
+
 TRANSLATE_PARALLEL = 2            # 번역 단위를 동시에 몇 개씩 (2 → 시간이 거의 절반)
 
 # 작업별 시간 제한 (초)

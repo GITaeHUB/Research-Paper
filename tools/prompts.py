@@ -152,12 +152,27 @@ KIND_TASK = {
 }
 
 
+LENGTH = {
+    "short": "답변 길이: **짧게** — 핵심만 3~6문장 (필요하면 식 하나). 목록·제목 없이.",
+    "normal": "답변 길이: 보통 — 필요한 만큼, 길어도 화면 한두 쪽.",
+    "long": "답변 길이: **자세히** — 단계별로 충분히 (배경 → 전개 → 예 → 논문 안 근거 → 정리).",
+}
+
+
+def history_digest(items, limit=40):
+    """새 세션으로 넘길 때 앞 대화를 대신하는 짧은 요약 (지난 Q&A 의 제목 · 핵심)."""
+    rows = []
+    for q in items[-limit:]:
+        rows.append("- [{}] {} — {}".format(q.get("tag", "전체"), q.get("title", ""), q.get("key_point", "")))
+    return ("이전 대화 요약 (이 논문에 대해 이미 나눈 Q&A, 필요하면 이어서 참고):" + chr(10) + chr(10).join(rows) + chr(10) * 2) if rows else ""
+
+
 def session_primer(meta, pdf_rel, paper_txt_rel, units):
     toc = "\n".join("- {} {} (p.{}~{})".format(u["id"], u["title"], u["page_start"], u["page_end"]) for u in units)
     return """이 대화는 논문 한 편에 대한 Q&A 세션입니다. 앞으로 같은 논문에 대한 질문이 이어집니다.
 
 논문: {title} ({venue} {year}) · Task: {task}
-- 전체 원문 (쪽 표시 [p.N]): `{txt}`  ← 답하기 전에 필요한 부분을 Read 로 확인하세요. 처음 한 번은 전체를 읽어 두면 좋습니다.
+- 전체 원문 (쪽 표시 [p.N]): `{txt}`  ← 전체를 한꺼번에 읽지 말고, Grep 으로 필요한 곳을 찾은 뒤 Read 의 offset/limit 으로 그 부분만 읽으세요 (토큰 절약).
 - PDF: `{pdf}` (그림·표·수식은 Read 의 pages 인자로 해당 쪽을 직접 보세요)
 - 번역: `library/{key}/sections/*.json`, 해설: `library/{key}/overview.json`
 
@@ -168,9 +183,9 @@ def session_primer(meta, pdf_rel, paper_txt_rel, units):
            txt=paper_txt_rel, pdf=pdf_rel, key=meta["key"], toc=toc)
 
 
-def ask(kind, question, anchor_desc, anchor_text):
+def ask(kind, question, anchor_desc, anchor_text, length="normal"):
     task = KIND_TASK.get(kind)
-    parts = [HEAD + "작업: 논문 Q&A"]
+    parts = [HEAD + "작업: 논문 Q&A", LENGTH.get(length, LENGTH["normal"])]
     if anchor_desc:
         parts.append("질문 위치: " + anchor_desc)
     if anchor_text:

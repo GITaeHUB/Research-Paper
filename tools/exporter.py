@@ -102,9 +102,18 @@ def overview_md(key, heading=True):
 
 
 # ---------- 원문 · 번역 ----------
+def apply_marks(text, note, field, left="<mark>", right="</mark>"):
+    """드래그로 고른 하이라이트를 글에 표시합니다 (처음 나오는 곳 한 번)."""
+    for h in (note or {}).get("hls", []):
+        if h.get("f") == field and h.get("s") and h["s"] in text:
+            text = text.replace(h["s"], left + h["s"] + right, 1)
+    return text
+
+
 def block_md(b, note=None):
     t = b["type"]
     lines = []
+    b = dict(b, orig=apply_marks(b.get("orig", ""), note, "orig"), ko=apply_marks(b.get("ko", ""), note, "ko"))
     if t == "heading":
         lines.append("#### {}  \n_{}_".format(b.get("orig", ""), b.get("ko", "")))
     elif t == "equation":
@@ -119,8 +128,6 @@ def block_md(b, note=None):
     if b.get("note"):
         lines.append("\n💡 " + b["note"])
     if note:
-        if note.get("hl"):
-            lines.append("\n🖍 _하이라이트_")
         if note.get("memo"):
             lines.append("\n📝 **내 메모:** " + note["memo"])
     return "\n".join(lines) + "\n"

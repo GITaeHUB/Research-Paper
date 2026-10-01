@@ -199,36 +199,46 @@ def anchor_info(key, anchor):
     return desc, text, tag
 
 
-def ask(key, question, anchor="", kind="qa", new_session=False, progress=_noop):
+def ask(key, question, anchor="", kind="qa", new_session=False, progress=_noop, length="normal", model=None):
+    """질문 하나. model = None(기본 Opus) / "sonnet"(절약). length = short / normal / long.
+
+    토큰 절약: 같은 논문의 질문은 세션을 이어 가지만, 세션 입력이 config.QA_SESSION_LIMIT 를 넘으면
+    다음 질문은 앞 대화 전체 대신 지난 Q&A 요약(제목·핵심)만 들고 새 세션으로 시작합니다.
+    모델을 바꾸면 세션도 새로 시작합니다 (다른 모델로는 이어 갈 수 없음)."""
     m = library.load_meta(key)
     desc, text, tag = anchor_info(key, anchor)
-    prompt = prompts.ask(kind, question, desc, text)
-    sid = None if new_session else m.get("qa_session")
+    prompt = prompts.ask(kind, question, desc, text, length)
+    model = model or config.MODELS["qa"]
+    sid = m.get("qa_session")
+    compacted = False
+    if new_session or m.get("qa_model", config.MODELS["qa"]) != model:
+        sid = None
+    elif sid and (m.get("qa_session_tin") or 0) > config.QA_SESSION_LIMIT:
+        sid, compacted = None, True
+    tools = ("Read", "Grep", "WebSearch", "WebFetch")
 
     def on_text(t):
         progress(None, None, "답을 쓰는 중", partial=t)
     progress(0, 1, "Claude 가 논문을 확인하는 중")
-    try:
-        if sid:
-            res = claude.run(prompt, "qa", prompts.QA_SCHEMA, tools=("Read", "WebSearch", "WebFetch"), resume=sid, key=key,
-                             on_text=on_text)
-        else:
-            raise LookupError
-    except (LookupError, claude.ClaudeError) as e:
-        if isinstance(e, claude.ClaudeError) and "conversation" not in str(e).lower() and "session" not in str(e).lower():
-            raise
+    res = None
+    if sid:
+        try:
+            res = claude.run(prompt, "qa", prompts.QA_SCHEMA, tools=tools, resume=sid, key=key, on_text=on_text, model=model)
+        except claude.ClaudeError as e:
+            if "conversation" not in str(e).lower() and "session" not in str(e).lower():
+                raise
+    if res is None:
         sid = claude.new_session_id()
         library.ensure_pages(key)
         primer = prompts.session_primer(m, library.rel_pdf(m), "library/{}/paper.txt".format(key), m.get("units", []))
-        res = claude.run(primer + prompt, "qa", prompts.QA_SCHEMA, tools=("Read", "WebSearch", "WebFetch"), session_id=sid, key=key,
-                         on_text=on_text)
-        library.update_meta(key, qa_session=sid)
-    if res.get("session_id") and res["session_id"] != library.load_meta(key).get("qa_session"):
-        library.update_meta(key, qa_session=res["session_id"])
+        digest = prompts.history_digest(library.load_qa(key)) if (compacted or not new_session) else ""
+        res = claude.run(primer + digest + prompt, "qa", prompts.QA_SCHEMA, tools=tools, session_id=sid, key=key,
+                         on_text=on_text, model=model)
+    library.update_meta(key, qa_session=res.get("session_id") or sid, qa_session_tin=res.get("tin", 0), qa_model=model)
     d = res["data"]
     item = {"id": uuid.uuid4().hex[:10], "ts": now_str(), "kind": kind, "anchor": anchor or "all", "tag": tag,
             "question": question, "title": d.get("title", ""), "tags": d.get("tags", []), "answer": d.get("answer", ""),
-            "key_point": d.get("key_point", ""), "model": config.MODELS["qa"]}
+            "key_point": d.get("key_point", ""), "model": model, "length": length}
     append_jsonl(library.paper_dir(key) / "qa.jsonl", item)
     exporter.export(key)
     return item
@@ -242,17 +252,25 @@ def delete_qa(key, qid):
 
 
 # ---------- 5. 메모 · 하이라이트 · 용어집 ----------
-def set_note(key, block_id, memo=None, highlight=None):
+def set_note(key, block_id, memo=None, add_hl=None, remove_hl=None):
+    """메모 · 하이라이트. 하이라이트는 드래그로 고른 글자: {"f": "ko" 또는 "orig", "s": "고른 글"}."""
     with LOCK:
         p = library.paper_dir(key) / "notes.json"
         notes = load_json(p, {}) or {}
         n = notes.get(block_id, {})
+        n.pop("hl", None)   # 예전 방식(문단 통째 하이라이트)은 정리
         if memo is not None:
             n["memo"] = memo.strip()
-        if highlight is not None:
-            n["hl"] = highlight
+        hls = [h for h in n.get("hls", []) if h.get("s")]
+        if add_hl and (add_hl.get("s") or "").strip():
+            h = {"f": add_hl.get("f", "ko"), "s": add_hl["s"].strip()}
+            if h not in hls:
+                hls.append(h)
+        if remove_hl:
+            hls = [h for h in hls if not (h["f"] == remove_hl.get("f") and h["s"] == remove_hl.get("s"))]
+        n["hls"] = hls
         n["ts"] = now_str()
-        if not n.get("memo") and not n.get("hl"):
+        if not n.get("memo") and not n.get("hls"):
             notes.pop(block_id, None)
         else:
             notes[block_id] = n

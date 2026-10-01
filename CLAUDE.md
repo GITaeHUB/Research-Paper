@@ -52,6 +52,8 @@
 - 그림·표 이미지는 화면(PDF.js, `web/app.js` 의 `figureRect`)이 캡션 위치로 잘라 `library/<key>/figs/<블록 id>.png` 에 저장합니다. Notion 동기화가 이것을 이미지로 올립니다.
 - 서버 보안 (`tools/server.py`): 켤 때마다 새 토큰 → index.html 에 심음 → /api · /pdf · /fig 는 `X-RP-Token` 헤더나 `?t=` 필요. Host/Origin 은 127.0.0.1/localhost:포트 만. 새 경로를 추가할 때 이 검사를 우회하지 않습니다.
 - Notion 은 증분 동기화: `data/notion.json` 에 하위 페이지별 조각(k)·지문(h)·블록 id 를 둡니다.
+- 하이라이트는 드래그로 고른 글자: `notes.json` 의 `hls: [{f: "ko"|"orig", s: "고른 글"}]` (예전 `hl: true` 는 쓰지 않음). 문서·Notion 에도 그 부분만 표시.
+- 토큰 절약: `tools/claude.py` 의 `SYSTEM_PROMPT`(기본 시스템 프롬프트 대체), `config.EFFORT`, `config.QA_SESSION_LIMIT`(넘으면 지난 Q&A 요약으로 새 세션). 질문은 `length`(short/normal/long) · `model`(None=Opus / sonnet) 을 받습니다.
 - 첫 실행 때 바탕화면 바로가기를 한 번 자동으로 만듭니다 (`tools/shortcut.py`, 표시 파일 `data/.shortcut`).
 - 사용량은 토큰(`claude_log.jsonl` 의 tin/tout)과 구독 한도(`data/limits.json`, stream-json 의 rate_limit_event)로 보여 줍니다. 금액은 보여 주지 않습니다.
 - 블록 id 는 `<단위 id>-<번호>` (예: `3.2-4`). 화면과 문서에서 `§3.2-4` 로 표시하고, Q&A 의 anchor 로 씁니다.

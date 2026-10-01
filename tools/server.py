@@ -231,7 +231,8 @@ def post_ask(h, q, body, key):
     anchor = body.get("anchor") or "all"
     label = {"qa": "질문", "explain": "깊게 해설", "figure": "그림 해설", "equation": "수식 풀이"}.get(kind, "질문")
     return _job("ask", key, "{} · {}".format(label, anchor if anchor != "all" else "전체"),
-                lambda p, s: pipeline.ask(key, question, anchor, kind, body.get("new_session", False), progress=p),
+                lambda p, s: pipeline.ask(key, question, anchor, kind, body.get("new_session", False), progress=p,
+                                          length=body.get("length", "normal"), model=body.get("model") or None),
                 lane="fg", unique=False)
 
 
@@ -243,7 +244,7 @@ def post_qa_delete(h, q, body, key):
 
 @route("POST", r"/api/paper/([^/]+)/note")
 def post_note(h, q, body, key):
-    return {"notes": pipeline.set_note(_key(key), body["block"], body.get("memo"), body.get("hl"))}
+    return {"notes": pipeline.set_note(_key(key), body["block"], body.get("memo"), body.get("add_hl"), body.get("remove_hl"))}
 
 
 @route("POST", r"/api/paper/([^/]+)/glossary")
@@ -290,6 +291,31 @@ def post_open(h, q, body, key):
         os.startfile(str(library.pdf_path(m)))  # noqa: S606 — 이 컴퓨터의 기본 PDF 프로그램으로 열기
     else:
         os.startfile(str(exporter.export(key)))  # noqa: S606
+    return {"ok": True}
+
+
+@route("POST", r"/api/comparisons/delete")
+def post_compare_delete(h, q, body):
+    from .utils import LOCK, save_json
+    with LOCK:
+        items = [c for c in (load_json(config.DATA / "comparisons.json", []) or []) if c.get("id") != body.get("id")]
+        save_json(config.DATA / "comparisons.json", items)
+    return {"ok": True}
+
+
+@route("POST", r"/api/lineage/delete")
+def post_lineage_delete(h, q, body):
+    f = config.DATA / "lineage.json"
+    if f.exists():
+        f.unlink()
+    return {"ok": True}
+
+
+@route("POST", r"/api/global-qa/delete")
+def post_global_delete(h, q, body):
+    from .utils import write_jsonl
+    p = config.DATA / "global_qa.jsonl"
+    write_jsonl(p, [x for x in read_jsonl(p) if x.get("id") != body.get("id")])
     return {"ok": True}
 
 

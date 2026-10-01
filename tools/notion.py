@@ -60,7 +60,7 @@ def _req(method, path, body=None, retry=4):
 
 
 # ---------- 글 → rich_text ----------
-INLINE_RE = re.compile(r"(\*\*.+?\*\*|\$[^$\n]+?\$|`[^`\n]+?`|\[[^\]\n]+?\]\([^)\s]+\)|(?<![*\w])\*(?![\s*])[^*\n]+?(?<!\s)\*(?![*\w]))")
+INLINE_RE = re.compile(r"(==[^=\n]+?==|\*\*.+?\*\*|\$[^$\n]+?\$|`[^`\n]+?`|\[[^\]\n]+?\]\([^)\s]+\)|(?<![*\w])\*(?![\s*])[^*\n]+?(?<!\s)\*(?![*\w]))")
 
 
 def rich(text, bold=False, italic=False, color=None):
@@ -72,6 +72,9 @@ def rich(text, bold=False, italic=False, color=None):
         ann = {"bold": bold, "italic": italic}
         if color:
             ann["color"] = color
+        if part.startswith("==") and part.endswith("==") and len(part) > 4:   # 하이라이트
+            out += rich(part[2:-2], bold, italic, "yellow_background")
+            continue
         if part.startswith("**") and part.endswith("**") and len(part) > 4:
             out += rich(part[2:-2], True, italic, color)
             continue
@@ -253,8 +256,8 @@ def block_children(b, note=None, figdir=None):
         out.append(blk("callout", "**{}** {}\n{}".format(b.get("label", ""), b.get("ko", ""), b.get("orig", "")),
                        icon={"emoji": "🖼️" if t == "figure" else "📊"}, color="gray_background"))
     else:
-        out.append(blk("quote", b.get("orig", ""), color="gray"))
-        out.append(blk("paragraph", b.get("ko", ""), color="yellow_background" if note and note.get("hl") else None))
+        out.append(blk("quote", exporter.apply_marks(b.get("orig", ""), note, "orig", "==", "=="), color="gray"))
+        out.append(blk("paragraph", exporter.apply_marks(b.get("ko", ""), note, "ko", "==", "==")))
     if b.get("note"):
         out.append(blk("callout", b["note"], icon={"emoji": "💡"}, color="yellow_background"))
     if note and note.get("memo"):

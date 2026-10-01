@@ -82,7 +82,14 @@ def _partial_field(buf, field):
         return None
 
 
-def run(prompt, kind, schema=None, tools=(), session_id=None, resume=None, key=None, on_text=None, field="answer"):
+# Claude Code 기본 시스템 프롬프트(코딩 도우미용, 호출마다 ~2.3K 토큰) 대신 쓰는 짧은 프롬프트. 세부 규칙은 CLAUDE.md 와 요청문에.
+SYSTEM_PROMPT = ("You are Paper Reader's assistant for reading research papers (autonomous driving, deep learning, computer vision). "
+                 "Follow CLAUDE.md in the working directory. Use only the tools you are given, read files only as needed "
+                 "(use Read with offset/limit or the pages argument, or Grep, instead of reading whole files), never modify files, "
+                 "and always return the final answer through the required JSON schema. Write in Korean unless asked otherwise.")
+
+
+def run(prompt, kind, schema=None, tools=(), session_id=None, resume=None, key=None, on_text=None, field="answer", model=None):
     """Claude 를 한 번 부릅니다. 돌려주는 값: {"data": 구조화 출력(dict) 또는 None, "text": 글 답, "session_id", "cost"}
 
     on_text(글) 를 주면 답이 만들어지는 대로 field(기본 "answer") 의 지금까지 내용을 0.4초 간격으로 넘겨줍니다."""
@@ -90,9 +97,12 @@ def run(prompt, kind, schema=None, tools=(), session_id=None, resume=None, key=N
     if not exe:
         raise ClaudeError("Claude 실행 파일을 찾지 못했습니다. VS Code 에 Claude Code 확장이 설치되어 있는지 확인하세요. "
                           "(직접 지정하려면 환경변수 RP_CLAUDE 에 claude.exe 경로)")
-    model = config.MODELS.get(kind, "sonnet")
+    model = model or config.MODELS.get(kind, "sonnet")
     timeout = config.TIMEOUTS.get(kind, 900)
-    cmd = [exe, "-p", "--output-format", "stream-json", "--verbose", "--model", model, "--strict-mcp-config"]
+    cmd = [exe, "-p", "--output-format", "stream-json", "--verbose", "--model", model, "--strict-mcp-config",
+           "--system-prompt", SYSTEM_PROMPT]
+    if config.EFFORT.get(kind):
+        cmd += ["--effort", config.EFFORT[kind]]
     if on_text:
         cmd.append("--include-partial-messages")
     if tools:
@@ -185,7 +195,9 @@ def run(prompt, kind, schema=None, tools=(), session_id=None, resume=None, key=N
             _log(kind, model, key, time.time() - t0, res, False, "no structured output")
             raise ClaudeError("Claude 의 답을 정해진 형식으로 읽지 못했습니다. 다시 시도해 주세요.")
     _log(kind, model, key, time.time() - t0, res, True, "")
-    return {"data": data, "text": text, "session_id": res.get("session_id"), "cost": res.get("total_cost_usd") or 0}
+    u = res.get("usage") or {}
+    tin = (u.get("input_tokens") or 0) + (u.get("cache_creation_input_tokens") or 0) + (u.get("cache_read_input_tokens") or 0)
+    return {"data": data, "text": text, "session_id": res.get("session_id"), "tin": tin, "tout": u.get("output_tokens") or 0}
 
 
 def _parse_json(text):

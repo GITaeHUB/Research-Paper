@@ -400,6 +400,7 @@ function renderReader(el) {
 }
 
 // ---------- 그림 · 표 이미지 (PDF.js 로 쪽을 그리고 캡션 위치로 그림 영역만 잘라 냄) ----------
+const RECROP_BTN = '<button class="btn pearl sm recrop" data-recrop title="그림 영역을 직접 끌어서 다시 고릅니다">✂ 다시 자르기</button>';
 let pdfLibReady = null;
 const pdfDocs = {};
 let figQueue = Promise.resolve();
@@ -439,7 +440,7 @@ async function showFigure(box, key) {
   const id = box.dataset.fig;
   const mem = S.figCache[key + "/" + id];
   if (mem || box.dataset.cached === "1") {
-    box.innerHTML = `<img src="${mem || authUrl(`/fig/${encodeURIComponent(key)}/${encodeURIComponent(id)}.png`)}" alt="${esc(box.dataset.label)}">`;
+    box.innerHTML = `<img src="${mem || authUrl(`/fig/${encodeURIComponent(key)}/${encodeURIComponent(id)}.png`)}" alt="${esc(box.dataset.label)}">${RECROP_BTN}`;
     return;
   }
   try {
@@ -452,7 +453,7 @@ async function showFigure(box, key) {
     await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
     if (!rect) {
       // 캡션을 못 찾으면 쪽 전체를 작게 (저장하지 않음)
-      box.innerHTML = `<img src="${canvas.toDataURL("image/jpeg", 0.85)}" class="whole"><div class="fig-note">그림 위치를 찾지 못해 ${box.dataset.page}쪽 전체를 보여 줍니다</div>`;
+      box.innerHTML = `<img src="${canvas.toDataURL("image/jpeg", 0.85)}" class="whole"><div class="fig-note">그림 위치를 찾지 못해 ${box.dataset.page}쪽 전체를 보여 줍니다 — ✂ 다시 자르기로 직접 고를 수 있습니다</div>${RECROP_BTN}`;
       return;
     }
     const t = trimWhite(canvas, rect);
@@ -461,7 +462,7 @@ async function showFigure(box, key) {
     out.getContext("2d").drawImage(canvas, t.x, t.y, t.w, t.h, 0, 0, t.w, t.h);
     const png = out.toDataURL("image/png");
     if (!box.isConnected) return;
-    box.innerHTML = `<img src="${png}" alt="${esc(box.dataset.label)}">`;
+    box.innerHTML = `<img src="${png}" alt="${esc(box.dataset.label)}">${RECROP_BTN}`;
     box.dataset.cached = "1";
     S.figCache[key + "/" + id] = png;
     api.post(`/api/paper/${encodeURIComponent(key)}/figure`, { block: id, png }).then(() => {
@@ -563,15 +564,32 @@ async function figureRect(page, vp, label, type) {
   return { x: cx0, y: Math.max(0, y0), w: cx1 - cx0, h: Math.min(H, y1) - Math.max(0, y0) };
 }
 
+// 드래그로 고른 하이라이트를 그린 글에 <mark> 로 표시 (태그 밖 글자에서만 찾음, 처음 나오는 곳 한 번)
+function withMarks(html, note, field) {
+  const hls = ((note || {}).hls || []).filter((h) => h.f === field && h.s);
+  for (const h of hls) {
+    const needle = esc(h.s);
+    let done = false;
+    html = html.split(/(<[^>]+>)/).map((part) => {
+      if (done || part.startsWith("<")) return part;
+      const i = part.indexOf(needle);
+      if (i < 0) return part;
+      done = true;
+      return part.slice(0, i) + `<mark class="hlm" data-f="${field}" data-s="${esc(h.s)}" title="누르면 하이라이트 지우기">${needle}</mark>` + part.slice(i + needle.length);
+    }).join("");
+  }
+  return html;
+}
+
 function blockHtml(b, note, qas) {
   const t = b.type;
-  const hl = note && note.hl ? " hl" : "";
+  const hl = "";
   const sel = S.anchor === b.id ? " sel" : "";
   const tools = [`<button data-b="ask" title="이 블록에 대해 질문">📌 질문</button>`];
   if (t === "equation") tools.push(`<button data-b="equation">∑ 수식 풀이</button>`);
   else if (t === "figure" || t === "table") tools.push(`<button data-b="figure">🖼 ${t === "table" ? "표" : "그림"} 해설</button>`);
   else tools.push(`<button data-b="explain">💡 깊게 해설</button>`);
-  tools.push(`<button data-b="hl" title="하이라이트">🖍</button>`, `<button data-b="memo" title="메모">✎</button>`);
+  tools.push(`<button data-b="memo" title="메모">✎ 메모</button>`);
   if (b.page) tools.push(`<button data-b="page" title="PDF 에서 보기">p.${b.page}</button>`);
   let inner;
   if (t === "equation") {
@@ -579,22 +597,39 @@ function blockHtml(b, note, qas) {
   } else if (t === "figure" || t === "table") {
     const fig = b.page ? `<div class="figbox" data-fig="${esc(b.id)}" data-page="${b.page}" data-label="${esc(b.label || "")}" data-type="${t}" data-cached="${b.fig ? 1 : 0}" title="누르면 오른쪽에 PDF ${b.page}쪽이 열립니다"><div class="fig-ph">그림 불러오는 중…</div></div>` : "";
     inner = `<div class="cap-h"><span class="pill">${esc(b.label || (t === "table" ? "Table" : "Figure"))}</span><button class="btn ghost sm" data-b="page">PDF ${b.page}쪽에서 보기</button></div>
-      ${fig}<div class="orig">${inl(b.orig)}</div><div class="ko">${inl(b.ko)}</div>`;
+      ${fig}<div class="orig">${withMarks(inl(b.orig), note, "orig")}</div><div class="ko">${withMarks(inl(b.ko), note, "ko")}</div>`;
   } else if (t === "heading" && (b.ko || "").trim() === (b.orig || "").trim()) {
     inner = `<div class="orig">${inl(b.orig)}</div>`;   // 제목이 번역해도 같으면 한 번만
   } else {
-    inner = `<div class="orig">${inl(b.orig)}</div><div class="ko">${inl(b.ko)}</div>`;
+    inner = `<div class="orig">${withMarks(inl(b.orig), note, "orig")}</div><div class="ko">${withMarks(inl(b.ko), note, "ko")}</div>`;
   }
   const noteHtml = b.note ? `<div class="note">💡 ${inl(b.note)}</div>` : "";
   const memo = note && note.memo ? `<div class="memo">${esc(note.memo)}</div>` : "";
-  const qa = qas && qas.length ? `<details class="qa-inline"><summary>💬 ${qas.length}</summary>${qas.map(qaHtml).join("")}</details>` : "";
+  // 깊게 해설 · 그림 해설 · 수식 풀이는 문단 바로 아래 카드로, 일반 Q&A 는 💬 안에
+  const exps = (qas || []).filter((q) => q.kind !== "qa");
+  const qs = (qas || []).filter((q) => q.kind === "qa");
+  const expHtml = exps.length ? `<div class="explains">${exps.map((q) => qaHtml(q, S.justAnswered === q.id, "explain")).join("")}</div>` : "";
+  const qa = qs.length ? `<details class="qa-inline" ${qs.some((q) => q.id === S.justAnswered) ? "open" : ""}><summary>💬 Q&A ${qs.length}</summary>${qs.map((q) => qaHtml(q, S.justAnswered === q.id)).join("")}</details>` : "";
   return `<div class="blk ${t}${hl}${sel}" id="b-${esc(b.id)}" data-id="${esc(b.id)}" data-type="${t}" data-page="${b.page || ""}">
-    <span class="bid">${esc(b.id)}</span><div class="tools">${tools.join("")}</div>${inner}${noteHtml}${memo}${qa}</div>`;
+    <span class="bid">${esc(b.id)}</span><div class="tools">${tools.join("")}</div>${inner}${noteHtml}${memo}${expHtml}${qa}</div>`;
 }
 
 $("#main").addEventListener("click", async (e) => {
   const tocA = e.target.closest(".toc a");
   if (tocA) { e.preventDefault(); $("#u-" + tocA.dataset.unit)?.scrollIntoView({ behavior: "smooth" }); return; }
+  const mk = e.target.closest("mark.hlm");
+  if (mk) {
+    e.stopPropagation();
+    const id = mk.closest(".blk").dataset.id;
+    if (!confirm("이 하이라이트를 지울까요?")) return;
+    await run(async () => {
+      S.paper.notes = (await api.post(`/api/paper/${S.key}/note`, { block: id, remove_hl: { f: mk.dataset.f, s: mk.dataset.s } })).notes;
+      rerenderKeepScroll();
+    });
+    return;
+  }
+  const rc = e.target.closest("[data-recrop]");
+  if (rc) { e.stopPropagation(); openRecrop(rc.closest(".figbox")); return; }
   const fb = e.target.closest(".figbox");
   if (fb) { e.stopPropagation(); showPdf(+fb.dataset.page); return; }
   const tb = e.target.closest("[data-b]");
@@ -603,16 +638,12 @@ $("#main").addEventListener("click", async (e) => {
     e.stopPropagation();
     const id = blk.dataset.id, kind = tb.dataset.b;
     if (kind === "ask") { setAnchor(id); $("#askInput").focus(); }
-    else if (kind === "hl") {
-      const on = !blk.classList.contains("hl");
-      blk.classList.toggle("hl", on);
-      await run(async () => { S.paper.notes = (await api.post(`/api/paper/${S.key}/note`, { block: id, hl: on })).notes; });
-    } else if (kind === "memo") editMemo(id);
+    else if (kind === "memo") editMemo(id);
     else if (kind === "page") showPdf(+blk.dataset.page);
     else ask(kind, "", id);
     return;
   }
-  if (blk && !e.target.closest("details, a, button") && !String(window.getSelection())) setAnchor(S.anchor === blk.dataset.id ? null : blk.dataset.id);
+  if (blk && !e.target.closest("details, a, button, mark") && !String(window.getSelection())) setAnchor(S.anchor === blk.dataset.id ? null : blk.dataset.id);
 });
 
 function setupTocSpy() {
@@ -658,16 +689,24 @@ function editMemo(id) {
 }
 
 // ---------- Q&A ----------
-function qaHtml(q, open) {
+// "2026-10-01 16:33:04" → "10-01 오후 4:33"
+function fmtTs(ts) {
+  const m = String(ts || "").match(/^\d{4}-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+  if (!m) return esc(ts || "");
+  const h = +m[3];
+  return `${m[1]}-${m[2]} ${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${m[4]}`;
+}
+
+function qaHtml(q, open, cls) {
   const anchorBtn = q.anchor && q.anchor !== "all" ? `<button class="btn ghost sm" data-jump="${esc(q.anchor)}">본문에서 보기</button>` : "";
-  return `<details class="qa" ${open ? "open" : ""} data-qid="${esc(q.id)}">
+  return `<details class="qa ${cls || ""}" ${open ? "open" : ""} data-qid="${esc(q.id)}">
     <summary>${CHEV}<span class="pill ${q.anchor === "all" ? "gray" : ""}">${esc(q.tag || "전체")}</span><span class="ttl">${esc(q.title || q.question)}</span>
-      <span class="meta">${q.kind !== "qa" ? `<span class="pill amber">${KIND[q.kind]}</span>` : ""}${(q.tags || []).map((t) => `<span>#${esc(t)}</span>`).join("")}<span>${esc((q.ts || "").slice(5, 10))}</span></span></summary>
+      <span class="meta">${q.kind !== "qa" ? `<span class="pill amber">${KIND[q.kind]}</span>` : ""}${(q.tags || []).map((t) => `<span>#${esc(t)}</span>`).join("")}<span>${fmtTs(q.ts)}</span></span></summary>
     <div class="body">
       ${q.question ? `<div class="q"><b>질문</b> ${esc(q.question)}</div>` : ""}
       <div class="md">${md(q.answer)}</div>
       ${q.key_point ? `<div class="kp"><b>핵심</b> ${inl(q.key_point)}</div>` : ""}
-      <div class="foot">${anchorBtn}<button class="btn danger" data-delqa="${esc(q.id)}">삭제</button></div>
+      <div class="foot"><span class="muted small" style="margin-right:auto">${q.model ? esc(q.model) : ""}${q.length && q.length !== "normal" ? " · " + ({ short: "짧게", long: "자세히" }[q.length] || "") : ""}</span>${cls === "explain" ? "" : anchorBtn}<button class="btn danger" data-delqa="${esc(q.id)}">삭제</button></div>
     </div></details>`;
 }
 
@@ -697,15 +736,16 @@ document.addEventListener("click", async (e) => {
   if (j) { e.preventDefault(); return jumpTo(j.dataset.jump); }
   const d = e.target.closest("[data-delqa]");
   if (d) {
-    if (!confirm("이 Q&A 를 지울까요?")) return;
-    await run(async () => { await api.post(`/api/paper/${S.key}/qa/delete`, { id: d.dataset.delqa }); await reloadPaper(); });
+    if (!confirm("이 Q&A / 해설을 지울까요?")) return;
+    await run(async () => { await api.post(`/api/paper/${S.key}/qa/delete`, { id: d.dataset.delqa }); S.recentSig = null; await reloadPaper(); });
   }
   if (e.target.closest("[data-close]") || e.target.id === "modal") closeModal();
 });
 
 // 오른쪽 패널: 질문
-function setAnchor(id) {
+function setAnchor(id, selText) {
   S.anchor = id;
+  S.anchorSel = id ? selText || null : null;
   $$(".blk.sel").forEach((x) => x.classList.remove("sel"));
   if (id) document.getElementById("b-" + id)?.classList.add("sel");
   if (S.panel !== "ask") setPanel("ask");
@@ -719,7 +759,8 @@ function renderAnchor() {
   const label = b && b.label ? b.label : "§" + S.anchor;
   const snip = b ? (b.type === "equation" ? b.ko || b.latex : b.ko || b.orig) : "";
   chip.hidden = false;
-  chip.innerHTML = `<button class="x" title="선택 해제 (Esc)">×</button><div>📌 <b>${esc(label)}</b> 에 대해 질문합니다</div><div class="snip">${inl(snip)}</div>`;
+  chip.innerHTML = `<button class="x" title="선택 해제 (Esc)">×</button><div>📌 <b>${esc(label)}</b> 에 대해 질문합니다</div>` +
+    (S.anchorSel ? `<div class="selq">“${esc(S.anchorSel)}”</div>` : `<div class="snip">${inl(snip)}</div>`);
   chip.querySelector(".x").onclick = () => setAnchor(null);
 }
 
@@ -727,7 +768,7 @@ async function ask(kind, question, anchor) {
   if (!S.key) return toast("먼저 논문을 골라 주세요.", true);
   if (S.paper && S.paper.meta.status === "new") return toast("먼저 '읽기 시작' 으로 논문을 분석해 주세요.", true);
   await run(async () => {
-    const d = await api.post(`/api/paper/${S.key}/ask`, { kind, question, anchor: anchor || "all" });
+    const d = await api.post(`/api/paper/${S.key}/ask`, { kind, question, anchor: anchor || "all", length: S.len, model: S.model || null });
     S.pendingAsks.unshift({ job: d.job.id, key: S.key, kind, question, anchor: anchor || "all" });
     setPanel("ask");
     renderRecent();
@@ -739,11 +780,68 @@ $("#askBtn").addEventListener("click", submitAsk);
 $("#askInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submitAsk(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (!$("#modal").hidden) closeModal(); else setAnchor(null); } });
 async function submitAsk() {
-  const q = $("#askInput").value.trim();
+  let q = $("#askInput").value.trim();
   if (!q) return $("#askInput").focus();
+  if (S.anchorSel) q = `선택한 부분: "${S.anchorSel}"\n${q}`;
   await ask("qa", q, S.anchor);
   $("#askInput").value = "";
 }
+
+// 답변 길이 · 모델 (기억해 둠)
+S.len = pref.get("len", "normal");
+S.model = pref.get("model", "");
+function renderAskOpts() {
+  $$("#lenSeg button").forEach((b) => b.classList.toggle("on", b.dataset.len === S.len));
+  $$("#modelSeg button").forEach((b) => b.classList.toggle("on", b.dataset.model === S.model));
+}
+$("#lenSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { S.len = b.dataset.len; pref.set("len", S.len); renderAskOpts(); } });
+$("#modelSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { S.model = b.dataset.model; pref.set("model", S.model); renderAskOpts(); } });
+renderAskOpts();
+
+// ---------- 드래그로 고른 글: 하이라이트 · 이 부분 질문 · 이 부분 해설 ----------
+function rerenderKeepScroll() {
+  const m = $("#main"), top = m.scrollTop;
+  renderMain();
+  m.scrollTop = top;
+}
+document.addEventListener("mouseup", (e) => {
+  if (e.target.closest("#selPop")) return;
+  setTimeout(() => {
+    const sel = window.getSelection();
+    const text = String(sel || "").replace(/\s+/g, " ").trim();
+    const pop = $("#selPop");
+    if (!text || text.length < 2 || !sel.rangeCount) { pop.hidden = true; return; }
+    const el = (n) => (n && n.nodeType === 3 ? n.parentElement : n);
+    const a = el(sel.anchorNode) && el(sel.anchorNode).closest(".blk .orig, .blk .ko");
+    const f = el(sel.focusNode) && el(sel.focusNode).closest(".blk .orig, .blk .ko");
+    if (!a || a !== f) { pop.hidden = true; return; }
+    S.selInfo = { block: a.closest(".blk").dataset.id, f: a.classList.contains("ko") ? "ko" : "orig", s: text };
+    const r = sel.getRangeAt(0).getBoundingClientRect();
+    pop.hidden = false;
+    pop.style.left = Math.max(8, Math.min(window.innerWidth - pop.offsetWidth - 8, r.left + r.width / 2 - pop.offsetWidth / 2)) + "px";
+    pop.style.top = Math.max(66, r.top - pop.offsetHeight - 8) + "px";
+  }, 0);
+});
+document.addEventListener("mousedown", (e) => { if (!e.target.closest("#selPop")) $("#selPop").hidden = true; });
+$("#main").addEventListener("scroll", () => { $("#selPop").hidden = true; });
+$("#selPop").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-sel]");
+  const info = S.selInfo;
+  $("#selPop").hidden = true;
+  if (!b || !info) return;
+  window.getSelection().removeAllRanges();
+  if (b.dataset.sel === "hl") {
+    await run(async () => {
+      S.paper.notes = (await api.post(`/api/paper/${S.key}/note`, { block: info.block, add_hl: { f: info.f, s: info.s } })).notes;
+      rerenderKeepScroll();
+    });
+  } else if (b.dataset.sel === "ask") {
+    setAnchor(info.block, info.s);
+    $("#askInput").focus();
+  } else {
+    ask("explain", `선택한 부분: "${info.s}" — 이 부분을 중심으로 해설해 주세요.`, info.block);
+  }
+});
 $("#newSessionBtn").addEventListener("click", async () => {
   if (!S.key) return;
   await run(async () => { await api.post(`/api/paper/${S.key}/reset-session`); toast("다음 질문부터 새 대화로 시작합니다. 지난 Q&A 기록은 그대로 남습니다."); });
@@ -895,7 +993,7 @@ async function renderCompare() {
   main.innerHTML = `<div class="wrap">${backBtn()}
     <div class="callout"><div><b>논문 비교표</b><p>왼쪽 목록에서 비교할 논문을 두 편 이상 고르세요 (해설이 있는 논문일수록 정확합니다).${sel.length ? "<br>선택: " + names.map(esc).join(", ") : ""}</p></div>
     <button class="btn primary" id="cmpBtn" ${sel.length < 2 ? "disabled" : ""}>비교표 만들기 (${sel.length}편)</button></div>
-    ${items.map((c) => `<div class="card"><h2>${esc(c.title)}</h2><div class="muted small" style="margin:-6px 0 12px">${esc(c.created)}</div>
+    ${items.map((c) => `<div class="card"><h2>${esc(c.title)}<span style="flex:1"></span><button class="btn danger sm" data-delcmp="${esc(c.id)}">삭제</button></h2><div class="muted small" style="margin:-6px 0 12px">${esc(c.created)}</div>
       <div class="tbl-wrap"><table class="tbl"><tr><th></th>${c.columns.map((x) => `<th>${esc(x)}</th>`).join("")}</tr>
       ${c.rows.map((r) => `<tr><td><b>${esc(r.aspect)}</b></td>${r.values.map((v) => `<td>${inl(v)}</td>`).join("")}</tr>`).join("")}</table></div>
       <div class="md" style="margin-top:14px">${md(c.summary)}</div></div>`).join("")}</div>`;
@@ -909,7 +1007,8 @@ function loadMermaid() {
     const s = document.createElement("script");
     s.src = "/vendor/mermaid.min.js";
     s.onload = () => { mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "base", fontFamily: "Pretendard, sans-serif",
-      themeVariables: { primaryColor: "#ffffff", primaryBorderColor: "#d2d2d7", lineColor: "#b8b8bd", fontSize: "14px" } }); res(); };
+      flowchart: { useMaxWidth: false, nodeSpacing: 40, rankSpacing: 70, padding: 14 },
+      themeVariables: { primaryColor: "#ffffff", primaryBorderColor: "#d2d2d7", lineColor: "#9a9aa0", fontSize: "17px" } }); res(); };
     s.onerror = rej;
     document.head.appendChild(s);
   });
@@ -924,13 +1023,15 @@ async function renderLineage() {
   const busy = S.jobs.some((j) => j.kind === "lineage" && ["queued", "running"].includes(j.status));
   main.innerHTML = `<div class="wrap">${backBtn()}
     <div class="callout"><div><b>Task 계보도</b><p>라이브러리 논문들의 해설(연구 흐름 · 관련 논문)을 모아 Task 별 계보를 그리고, 다음에 읽을 논문을 추천합니다. 파란 칸 = 내 라이브러리 (누르면 열림).</p></div>
-    ${busy ? '<span class="spinner"></span>' : `<button class="btn primary" id="linBtn">${d ? "다시 만들기" : "계보도 만들기"}</button>`}</div>
+    <div style="display:flex;gap:8px">${d && !busy ? '<button class="btn danger" id="linDel">삭제</button>' : ""}${busy ? '<span class="spinner"></span>' : `<button class="btn primary" id="linBtn">${d ? "다시 만들기" : "계보도 만들기"}</button>`}</div></div>
     <div id="linBody">${d ? "" : '<div class="muted">아직 계보도가 없습니다.</div>'}</div></div>`;
+  const ld = $("#linDel");
+  if (ld) ld.onclick = () => { if (confirm("계보도를 지울까요?")) run(async () => { await api.post("/api/lineage/delete"); renderLineage(); }); };
   const b = $("#linBtn");
   if (b) b.onclick = () => run(async () => { await api.post("/api/lineage"); toast("계보도를 만드는 중입니다 (몇 분)."); pollJobs(); renderLineage(); });
   if (!d) return;
   const body = $("#linBody");
-  body.innerHTML = d.tasks.map((t, i) => `<div class="card"><h2>${esc(t.name)}</h2><div class="md muted" style="margin-bottom:12px">${md(t.summary)}</div><div class="lineage-graph" id="lg-${i}"></div></div>`).join("")
+  body.innerHTML = d.tasks.map((t, i) => `<div class="card"><h2>${esc(t.name)}</h2><div class="md muted" style="margin-bottom:12px">${md(t.summary)}</div><div class="graph-tools" data-g="${i}"><button class="btn pearl sm" data-z="-">－</button><span class="zoom" id="lz-${i}">100%</span><button class="btn pearl sm" data-z="+">＋</button><button class="btn pearl sm" data-z="fit">맞춤</button><button class="btn pearl sm" data-z="big">크게 보기</button></div><div class="lineage-graph" id="lg-${i}"></div></div>`).join("")
     + (d.recommendations.length ? `<div class="card"><h2>📖 다음에 읽을 논문</h2>${d.recommendations.map((r) => `<div class="related"><div class="r"><span class="nm">${r.url ? `<a href="${esc(r.url)}" target="_blank">${esc(r.title)}</a>` : esc(r.title)}</span> <span class="muted small">${esc(r.venue || "")} ${esc(r.year || "")}</span> ${r.verified ? '<span class="pill green">확인</span>' : '<span class="pill amber">미확인</span>'}<div class="df">${inl(r.why)}</div></div></div>`).join("")}</div>` : "")
     + `<div class="muted small" style="text-align:right">${esc(d.created)} · 논문 ${d.keys.length}편 기준</div>`;
   await loadMermaid();
@@ -950,7 +1051,8 @@ async function renderLineage() {
     try {
       const { svg, bindFunctions } = await mermaid.render("lgsvg" + i + Date.now(), lines.join("\n"));
       const box = $("#lg-" + i);
-      box.innerHTML = svg;
+      box.innerHTML = `<div class="gwrap">${svg}</div>`;
+      setGraphZoom(i, 1);
       if (bindFunctions) bindFunctions(box);
     } catch (e) { $("#lg-" + i).innerHTML = `<div class="muted small">그래프를 그리지 못했습니다: ${esc(e.message)}</div>`; }
   }
@@ -965,8 +1067,8 @@ async function renderGlobal() {
     <div class="card"><h2>📚 라이브러리 전체에 질문</h2><p class="muted small" style="margin-top:-6px">읽은 논문들의 해설 · 원문 · Q&A · 메모를 함께 찾아 답합니다. 예: "temporal fusion 을 다룬 논문들은 각각 어떻게 하지?"</p>
       <textarea id="gq" rows="3" placeholder="질문 (Ctrl+Enter)"></textarea><div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn primary" id="gqBtn">질문하기</button></div></div>
     <div id="gPending">${pend.length ? "" : ""}</div>
-    ${items.map((q) => `<details class="qa"><summary>${CHEV}<span class="ttl">${esc(q.title || q.question)}</span><span class="meta">${q.papers.map((k) => `<span class="pill gray">${esc((S.papers.find((p) => p.key === k) || {}).short || k)}</span>`).join("")}<span>${esc(q.ts.slice(5, 10))}</span></span></summary>
-      <div class="body"><div class="q"><b>질문</b> ${esc(q.question)}</div><div class="md">${md(q.answer)}</div></div></details>`).join("")}</div>`;
+    ${items.map((q) => `<details class="qa"><summary>${CHEV}<span class="ttl">${esc(q.title || q.question)}</span><span class="meta">${q.papers.map((k) => `<span class="pill gray">${esc((S.papers.find((p) => p.key === k) || {}).short || k)}</span>`).join("")}<span>${fmtTs(q.ts)}</span></span></summary>
+      <div class="body"><div class="q"><b>질문</b> ${esc(q.question)}</div><div class="md">${md(q.answer)}</div><div class="foot"><button class="btn danger" data-delgqa="${esc(q.id)}">삭제</button></div></div></details>`).join("")}</div>`;
   const go = () => {
     const q = $("#gq").value.trim();
     if (!q) return;
@@ -1083,6 +1185,117 @@ function renderJobsPop() {
   }).join("") : '<div class="muted small" style="padding:12px">최근 작업이 없습니다.</div>') + usage;
 }
 
+// 계보도 확대: svg 의 본래 크기(viewBox)에 배율을 곱해 폭을 정함 → 스크롤도 자연스럽게
+const graphZoom = {};
+function setGraphZoom(i, z, box) {
+  box = box || $("#lg-" + i);
+  const svg = box && box.querySelector("svg");
+  if (!svg) return;
+  const vb = (svg.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
+  const w = vb[2] || svg.getBBox().width;
+  if (z === "fit") z = Math.max(0.3, Math.min(2, (box.clientWidth - 24) / w));
+  z = Math.max(0.3, Math.min(3, z));
+  graphZoom[i] = z;
+  svg.style.width = Math.round(w * z) + "px";
+  svg.style.height = "auto";
+  const lab = $("#lz-" + i);
+  if (lab) lab.textContent = Math.round(z * 100) + "%";
+}
+document.addEventListener("click", async (e) => {
+  const zb = e.target.closest(".graph-tools [data-z]");
+  if (zb) {
+    const i = zb.closest(".graph-tools").dataset.g, z = graphZoom[i] || 1, a = zb.dataset.z;
+    if (a === "big") {
+      modal(`<div style="display:flex;align-items:center;gap:8px"><h3 style="margin:0">계보도</h3><span style="flex:1"></span><button class="btn pearl sm" data-mz="-">－</button><button class="btn pearl sm" data-mz="+">＋</button><button class="btn primary sm" data-close>닫기</button></div><div class="lineage-graph" id="lgBig" style="margin-top:10px">${$("#lg-" + i).innerHTML}</div>`);
+      $("#modalBody").className = "modal graph";
+      let mzv = 1.3;
+      setGraphZoom("big", mzv, $("#lgBig"));
+      $("#modalBody").onclick = (ev) => { const m = ev.target.closest("[data-mz]"); if (m) { mzv = m.dataset.mz === "+" ? mzv * 1.25 : mzv / 1.25; setGraphZoom("big", mzv, $("#lgBig")); } };
+      return;
+    }
+    setGraphZoom(i, a === "fit" ? "fit" : a === "+" ? z * 1.25 : z / 1.25);
+    return;
+  }
+  const dc = e.target.closest("[data-delcmp]");
+  if (dc) {
+    if (!confirm("이 비교표를 지울까요?")) return;
+    await run(async () => { await api.post("/api/comparisons/delete", { id: dc.dataset.delcmp }); renderCompare(); });
+    return;
+  }
+  const dg = e.target.closest("[data-delgqa]");
+  if (dg) {
+    if (!confirm("이 질문을 지울까요?")) return;
+    await run(async () => { await api.post("/api/global-qa/delete", { id: dg.dataset.delgqa }); renderGlobal(); });
+  }
+});
+
+// ---------- 그림 다시 자르기: 쪽 위에서 끌어서 영역 고르기 ----------
+async function openRecrop(box) {
+  const key = S.key, id = box.dataset.fig, pageNo = +box.dataset.page;
+  modal(`<div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0">✂ ${esc(box.dataset.label)} 다시 자르기</h3><span class="muted small">PDF ${pageNo}쪽 위에서 그림 영역을 끌어서 고르세요</span><span style="flex:1"></span>
+    <button class="btn pearl" data-close>취소</button><button class="btn primary" id="cropSave" disabled>저장</button></div>
+    <div class="crop-wrap" id="cropWrap"><div class="fig-ph">쪽을 그리는 중…</div></div>`);
+  $("#modalBody").className = "modal wide";
+  const doc = await pdfDoc(key);
+  const page = await doc.getPage(pageNo);
+  const base = page.getViewport({ scale: 1 });
+  const wrap = $("#cropWrap");
+  const scale = Math.min(2, (wrap.clientWidth - 4) / base.width);
+  const vp = page.getViewport({ scale });
+  const cv = document.createElement("canvas");
+  cv.width = vp.width; cv.height = vp.height;
+  await page.render({ canvasContext: cv.getContext("2d"), viewport: vp }).promise;
+  wrap.innerHTML = "";
+  wrap.appendChild(cv);
+  const rectEl = document.createElement("div");
+  rectEl.className = "crop-rect";
+  rectEl.hidden = true;
+  wrap.appendChild(rectEl);
+  let start = null, rect = null;
+  const pos = (ev) => { const r = cv.getBoundingClientRect(); return { x: Math.max(0, Math.min(cv.width, ev.clientX - r.left)), y: Math.max(0, Math.min(cv.height, ev.clientY - r.top)) }; };
+  const draw = () => { rectEl.hidden = false; Object.assign(rectEl.style, { left: cv.offsetLeft + rect.x + "px", top: cv.offsetTop + rect.y + "px", width: rect.w + "px", height: rect.h + "px" }); };
+  cv.addEventListener("mousedown", (ev) => { start = pos(ev); rect = { x: start.x, y: start.y, w: 0, h: 0 }; draw(); ev.preventDefault(); });
+  window.addEventListener("mousemove", function mv(ev) {
+    if (!start) return;
+    if ($("#modal").hidden) { window.removeEventListener("mousemove", mv); return; }
+    const p = pos(ev);
+    rect = { x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) };
+    draw();
+  });
+  window.addEventListener("mouseup", () => { if (start) { start = null; $("#cropSave").disabled = !(rect && rect.w > 10 && rect.h > 10); } }, { once: false });
+  $("#cropSave").onclick = () => run(async () => {
+    const hi = 2, f = hi / scale;   // 저장은 고해상도(배율 2)로 다시 그려서 자름
+    const vp2 = page.getViewport({ scale: hi });
+    const big = document.createElement("canvas");
+    big.width = vp2.width; big.height = vp2.height;
+    await page.render({ canvasContext: big.getContext("2d"), viewport: vp2 }).promise;
+    const out = document.createElement("canvas");
+    out.width = Math.round(rect.w * f); out.height = Math.round(rect.h * f);
+    out.getContext("2d").drawImage(big, rect.x * f, rect.y * f, rect.w * f, rect.h * f, 0, 0, out.width, out.height);
+    const png = out.toDataURL("image/png");
+    await api.post(`/api/paper/${encodeURIComponent(key)}/figure`, { block: id, png });
+    S.figCache[key + "/" + id] = png;
+    box.dataset.cached = "1";
+    box.innerHTML = `<img src="${png}" alt="${esc(box.dataset.label)}">${RECROP_BTN}`;
+    closeModal();
+    toast("그림을 다시 잘라 저장했습니다.");
+  });
+}
+
+// ---------- 화면 테마: 자동(윈도우 설정) → 밝게 → 어둡게 ----------
+function applyTheme(t) {
+  if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  $("#themeBtn").textContent = { auto: "🌓", light: "☀️", dark: "🌙" }[t];
+  $("#themeBtn").title = "화면 테마: " + { auto: "자동 (윈도우 설정)", light: "밝게", dark: "어둡게" }[t] + " — 누르면 바뀜";
+}
+applyTheme(pref.get("theme", "auto"));
+$("#themeBtn").addEventListener("click", () => {
+  const order = ["auto", "light", "dark"];
+  const t = order[(order.indexOf(pref.get("theme", "auto")) + 1) % 3];
+  pref.set("theme", t);
+  applyTheme(t);
+});
+
 // ---------- 사용 한도 (Claude 구독 5시간 창) ----------
 function renderLimits() {
   const pill = $("#limitPill");
@@ -1126,17 +1339,19 @@ setPanelWidth(pref.get("panelW", PANEL_DEFAULT));
 
 // ---------- 모달 ----------
 function modal(html) { $("#modalBody").innerHTML = html; $("#modal").hidden = false; }
-function closeModal() { $("#modal").hidden = true; $("#modalBody").onclick = null; }
+function closeModal() { $("#modal").hidden = true; $("#modalBody").onclick = null; $("#modalBody").className = "modal"; }
 
 // ---------- 시작 ----------
 async function boot() {
   const qs = new URLSearchParams(location.search);   // 예: /?tab=reader&key=...
   if (qs.get("tab")) S.tab = qs.get("tab");
   if (qs.get("key")) S.key = qs.get("key");
+  if (qs.get("theme")) applyTheme(qs.get("theme"));
   await run(loadLibrary);
   if (S.key && !S.papers.some((p) => p.key === S.key)) S.key = null;
   if (!S.key && S.papers.length) S.key = S.papers[0].key;
   if (S.key) await openPaper(S.key, { block: qs.get("block") || undefined, instant: true }); else renderMain();
+  if (["compare", "lineage", "global"].includes(qs.get("view"))) setView(qs.get("view"));
   pollJobs();
   setInterval(() => api.get("/api/ping").catch(() => {}), 5000);
   $("#reloadBtn").onclick = () => run(async () => { S.libSig = null; await loadLibrary(); toast("목록을 새로 고쳤습니다."); });
