@@ -171,7 +171,6 @@ body.dragging iframe { pointer-events: none; }
 .pending.live .pend-h { display: flex; align-items: center; gap: 8px; }
 .pending.live .q { margin-top: 8px; background: var(--pearl); border-radius: 8px; padding: 6px 10px; }
 .pending.live .stream { margin-top: 10px; font-size: 14px; color: var(--ink); line-height: 1.7; }
-.pending.live .stream > :last-child::after { content: "▍"; color: var(--accent); animation: pulse .8s infinite alternate; margin-left: 2px; }
 
 /* ---------- 본문 ---------- */
 .empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); gap: 10px; text-align: center; padding: 40px; }
@@ -451,9 +450,24 @@ details.qa.explain .body .md { padding-top: 10px; }
 .blk .tools { border: 1px solid var(--line); box-shadow: var(--shadow); }
 .blk .tools button { padding: 3px 9px; font-size: 12.5px; }
 /* Q&A · 해설 제목 줄의 삭제 */
-.sum-del { border: 0; background: transparent; color: var(--faint); font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: 6px; cursor: pointer; opacity: 0; transition: opacity .15s; }
+.sum-del { border: 0; background: transparent; color: var(--red); font-size: 12px; font-weight: 600; padding: 2px 7px; border-radius: 6px; cursor: pointer; opacity: .75; transition: opacity .15s, background .15s; }
 details.qa > summary:hover .sum-del { opacity: 1; }
 .sum-del:hover { color: var(--red); background: var(--red-soft); }
 /* 해설 탭 위쪽 막대 */
 .ov-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .note b { margin-right: 6px; }
+
+/* 쓰는 중인 마지막 문단 */
+.pending.live .stream .stream-tail { color: var(--ink2); white-space: pre-wrap; margin: 0; }
+/* 절 접기 */
+.unit-h[data-fold] { cursor: pointer; user-select: none; border-radius: 8px; }
+.unit-h[data-fold]:hover h2 { color: var(--accent); }
+.fold-chev { color: var(--muted); flex: none; align-self: center; transition: transform .2s; }
+.unit.folded .fold-chev { transform: rotate(-90deg); }
+.unit.folded .unit-body { display: none; }
+.unit.folded { margin-bottom: 8px; }
+.unit.folded .unit-h { margin-bottom: 0; }
+.fold-count { font-size: 12px; color: var(--faint); font-weight: 600; }
+/* 코드 탭: 저장소 고르기 */
+.code-pick .field-row { align-items: center; }
+.code-pick .field { flex: 1; }

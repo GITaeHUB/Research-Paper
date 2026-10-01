@@ -221,7 +221,7 @@ function renderMain() {
     ${headerHtml(p)}
     <div class="tabs">${tabs.map(([k, n, c]) => `<button data-tab="${k}" class="${S.tab === k ? "on" : ""}">${n}${c ? `<span class="count">${c}</span>` : ""}</button>`).join("")}
       <span class="spacer"></span>
-      ${S.tab === "reader" ? `<div class="seg" id="modeSeg"><button data-m="both" class="${S.mode === "both" ? "on" : ""}">원문 + 번역</button><button data-m="ko" class="${S.mode === "ko" ? "on" : ""}">번역만</button><button data-m="en" class="${S.mode === "en" ? "on" : ""}">원문만</button></div>` : ""}
+      ${S.tab === "reader" ? `<button class="btn ghost sm" id="foldAll" title="모든 절 접기 / 펼치기">${foldSet().size ? "모두 펼치기" : "모두 접기"}</button><div class="seg" id="modeSeg"><button data-m="both" class="${S.mode === "both" ? "on" : ""}">원문 + 번역</button><button data-m="ko" class="${S.mode === "ko" ? "on" : ""}">번역만</button><button data-m="en" class="${S.mode === "en" ? "on" : ""}">원문만</button></div>` : ""}
     </div>
     <div id="tabBody"></div>
   </div>`;
@@ -396,10 +396,11 @@ function renderReader(el) {
     else if (u.status === "running") inner = `<div class="unit-empty"><span><span class="spinner"></span>&nbsp; 번역 중입니다…</span></div>`;
     else if (u.status === "error") inner = `<div class="unit-empty"><span style="color:var(--red)">번역 실패: ${esc(u.error || "")}</span><button class="btn pearl sm" data-act="translate" data-unit="${u.i}">다시 번역</button></div>`;
     else inner = `<div class="unit-empty"><span>아직 번역되지 않았습니다 (PDF ${u.page_start}~${u.page_end}쪽)</span><button class="btn pearl sm" data-act="translate" data-unit="${u.i}">이 단위만 번역</button></div>`;
-    return `<section class="unit" id="u-${u.i}" data-i="${u.i}">
-      <div class="unit-h"><span class="no">${esc(u.id === "abs" ? "" : u.id)}</span><h2>${esc(title)}</h2><span style="flex:1"></span>
+    const folded = foldSet().has(u.id);
+    return `<section class="unit ${folded ? "folded" : ""}" id="u-${u.i}" data-i="${u.i}" data-uid="${esc(u.id)}">
+      <div class="unit-h" data-fold title="눌러서 접기 / 펼치기">${FOLD_CHEV}<span class="no">${esc(u.id === "abs" ? "" : u.id)}</span><h2>${esc(title)}</h2>${u.blocks.length ? `<span class="fold-count">${u.blocks.length}문단</span>` : ""}<span style="flex:1"></span>
       ${u.blocks.length ? `<button class="btn ghost sm" data-act="translate" data-unit="${u.i}" title="이 단위를 다시 번역합니다">다시 번역</button>` : ""}</div>
-      ${inner}</section>`;
+      <div class="unit-body">${inner}</div></section>`;
   }).join("");
   el.innerHTML = `<div class="reader"><nav class="toc">${toc}</nav><div class="reader-body mode-${S.mode}">${body}</div></div>`;
   setupTocSpy();
@@ -618,12 +619,29 @@ function blockHtml(b, note, qas) {
   const expHtml = exps.length ? `<div class="explains">${exps.map((q) => qaHtml(q, S.justAnswered === q.id, "explain")).join("")}</div>` : "";
   const qa = qs.length ? `<details class="qa-inline" ${qs.some((q) => q.id === S.justAnswered) ? "open" : ""}><summary>Q&A ${qs.length}</summary>${qs.map((q) => qaHtml(q, S.justAnswered === q.id)).join("")}</details>` : "";
   return `<div class="blk ${t}${hl}${sel}" id="b-${esc(b.id)}" data-id="${esc(b.id)}" data-type="${t}" data-page="${b.page || ""}">
-    <span class="bid">${esc(b.id)}</span><div class="tools">${tools.join("")}</div>${inner}${noteHtml}${memo}${expHtml}${qa}</div>`;
+    <div class="tools">${tools.join("")}</div>${inner}${noteHtml}${memo}${expHtml}${qa}</div>`;
 }
 
 $("#main").addEventListener("click", async (e) => {
   const tocA = e.target.closest(".toc a");
-  if (tocA) { e.preventDefault(); $("#u-" + tocA.dataset.unit)?.scrollIntoView({ behavior: "smooth" }); return; }
+  if (tocA) {
+    e.preventDefault();
+    const sec = $("#u-" + tocA.dataset.unit);
+    if (sec && sec.classList.contains("folded")) toggleFold(sec);   // 목차로 가면 그 절은 펼침
+    sec?.scrollIntoView({ behavior: "smooth" });
+    return;
+  }
+  const fa = e.target.closest("#foldAll");
+  if (fa) {
+    const secs = $$(".unit");
+    const fold = !foldSet().size;
+    saveFold(fold ? secs.map((s) => s.dataset.uid) : []);
+    secs.forEach((s) => s.classList.toggle("folded", fold));
+    fa.textContent = fold ? "모두 펼치기" : "모두 접기";
+    return;
+  }
+  const fh = e.target.closest("[data-fold]");
+  if (fh && !e.target.closest("button")) { toggleFold(fh.closest(".unit")); return; }
   const mk = e.target.closest("mark.hlm");
   if (mk) {
     e.stopPropagation();
@@ -653,6 +671,19 @@ $("#main").addEventListener("click", async (e) => {
   if (blk && !e.target.closest("details, a, button, mark") && !String(window.getSelection())) setAnchor(S.anchor === blk.dataset.id ? null : blk.dataset.id);
 });
 
+// 절 접기: 논문마다 접어 둔 절을 기억
+const FOLD_CHEV = '<svg class="fold-chev" viewBox="0 0 20 20" width="14" height="14"><path d="M5 7l5 6 5-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function foldSet() { return new Set(pref.get("fold." + S.key, [])); }
+function saveFold(ids) { pref.set("fold." + S.key, ids); }
+function toggleFold(sec) {
+  const set = foldSet(), id = sec.dataset.uid;
+  if (set.has(id)) set.delete(id); else set.add(id);
+  saveFold([...set]);
+  sec.classList.toggle("folded", set.has(id));
+  const fa = $("#foldAll");
+  if (fa) fa.textContent = set.size ? "모두 펼치기" : "모두 접기";
+}
+
 function setupTocSpy() {
   const main = $("#main");
   const units = $$(".unit");
@@ -670,6 +701,8 @@ function jumpTo(blockId, instant) {
   const go = () => {
     const el = document.getElementById("b-" + blockId);
     if (!el) return;
+    const sec = el.closest(".unit.folded");
+    if (sec) toggleFold(sec);
     el.scrollIntoView({ behavior: instant ? "instant" : "smooth", block: "center" });
     el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
   };
@@ -855,18 +888,39 @@ $("#newSessionBtn").addEventListener("click", async () => {
   await run(async () => { await api.post(`/api/paper/${S.key}/reset-session`); toast("다음 질문부터 새 대화로 시작합니다. 지난 Q&A 기록은 그대로 남습니다."); });
 });
 
+// 쓰는 중인 답: 끝난 문단까지만 서식(마크다운·수식)을 입히고, 쓰는 중인 마지막 문단은 글자 그대로 → 수식이 켜졌다 꺼졌다 하지 않음
+function streamHtml(text) {
+  const cut = text.lastIndexOf("\n\n");
+  const done = cut > 0 ? text.slice(0, cut) : "";
+  const tail = cut > 0 ? text.slice(cut + 2) : text;
+  return (done ? md(done) : "") + (tail ? `<p class="stream-tail">${esc(tail)}</p>` : "");
+}
+
 function renderPending() {
-  // 답을 기다리는 질문: Claude 가 쓰는 중인 답을 실시간으로 보여 줌
+  // 답을 기다리는 질문: 카드는 한 번 만들고 그 안의 글만 바꿈 (스피너·레이아웃이 다시 그려지며 깜빡이지 않게)
   const box = $("#pendingAsk");
   const pend = S.pendingAsks.filter((p) => p.key === S.key);
-  const html = pend.map((p) => {
+  const ids = pend.map((p) => p.job);
+  [...box.children].forEach((c) => { if (!ids.includes(c.dataset.job)) c.remove(); });
+  for (const p of pend) {
     const j = S.jobs.find((x) => x.id === p.job) || {};
-    const head = `<div class="pend-h"><span class="spinner"></span><b>${KIND[p.kind]}</b><span class="pill ${p.anchor === "all" ? "gray" : ""}">${esc(p.anchor === "all" ? "전체" : "§" + p.anchor)}</span><span class="muted small">${esc(j.message || "대기 중")}</span></div>`;
-    const q = p.question ? `<div class="q small">${esc(p.question)}</div>` : "";
-    const body = j.partial ? `<div class="md stream">${md(j.partial)}</div>` : "";
-    return `<div class="pending live">${head}${q}${body}</div>`;
-  }).join("");
-  if (html !== S.pendingHtml) { box.innerHTML = html; S.pendingHtml = html; }
+    let card = box.querySelector(`[data-job="${p.job}"]`);
+    if (!card) {
+      card = document.createElement("div");
+      card.className = "pending live";
+      card.dataset.job = p.job;
+      card.innerHTML = `<div class="pend-h"><span class="spinner"></span><b>${KIND[p.kind]}</b><span class="pill ${p.anchor === "all" ? "gray" : ""}">${esc(p.anchor === "all" ? "전체" : "§" + p.anchor)}</span><span class="muted small msg"></span></div>
+        ${p.question ? `<div class="q small">${esc(p.question)}</div>` : ""}<div class="md stream"></div>`;
+      box.prepend(card);
+    }
+    const msg = card.querySelector(".msg");
+    if (msg.textContent !== (j.message || "대기 중")) msg.textContent = j.message || "대기 중";
+    const part = j.partial || "";
+    if (card.dataset.len !== String(part.length)) {
+      card.dataset.len = String(part.length);
+      card.querySelector(".stream").innerHTML = part ? streamHtml(part) : "";
+    }
+  }
 }
 
 function renderRecent() {
@@ -947,9 +1001,26 @@ function renderMemos(el) {
 function renderCode(el) {
   const c = S.paper.code;
   const busy = (S.paper.busy || []).some((j) => j.kind === "code");
+  const picker = `<div class="card code-pick"><h2>${c ? "다른 저장소로 다시 연결" : "코드 저장소 연결"}</h2>
+    <p class="muted small" style="margin:-6px 0 12px">논문의 모듈(예: §3.2 의 attention, Eq. 5 의 손실)이 저장소의 어느 파일에 있는지 연결합니다. 자동으로 못 찾거나 엉뚱한 저장소를 고르면 주소를 직접 넣으세요.</p>
+    ${busy ? '<div class="pending"><span class="spinner"></span>저장소를 분석하는 중입니다…</div>' : `<div class="field-row"><button class="btn pearl" id="codeAuto">자동으로 찾기</button>
+      <input id="codeUrl" class="field" placeholder="또는 저장소 주소 직접 입력 — https://github.com/…" value="${esc((c && c.source === "user" && c.repo_url) || "")}"><button class="btn primary" id="codeUse">이 저장소로 연결</button></div>`}</div>`;
+  const bindPicker = () => {
+    const go = (repo) => run(async () => {
+      await api.post(`/api/paper/${encodeURIComponent(S.key)}/code`, repo ? { repo_url: repo } : {});
+      toast(repo ? "지정한 저장소를 분석합니다." : "코드 저장소를 찾는 중입니다.");
+      await pollJobs();
+      reloadPaper();
+    });
+    const a = $("#codeAuto"), u = $("#codeUse");
+    if (a) a.onclick = () => go(null);
+    if (u) u.onclick = () => { const v = $("#codeUrl").value.trim(); if (!/^https?:\/\//.test(v)) return toast("https:// 로 시작하는 저장소 주소를 넣어 주세요.", true); go(v); };
+    const f = $("#codeUrl");
+    if (f) f.onkeydown = (e) => { if (e.key === "Enter") u.click(); };
+  };
   if (!c) {
-    el.innerHTML = `<div class="callout"><div><b>코드 저장소 연결</b><p>공식 GitHub 저장소를 찾아 논문의 모듈(예: §3.2 의 attention, Eq. 5 의 손실)이 어느 파일에 있는지 연결합니다.</p></div>
-      ${busy ? '<span class="spinner"></span>' : '<button class="btn primary" data-act="code">저장소 찾기</button>'}</div>`;
+    el.innerHTML = picker;
+    bindPicker();
     return;
   }
   el.innerHTML = `<div class="card"><h2>${c.repo_url ? `<a href="${esc(c.repo_url)}" target="_blank">${esc(c.repo_url.replace(/^https?:\/\/(www\.)?github\.com\//, ""))}</a>` : "저장소를 찾지 못했습니다"}</h2>
@@ -958,7 +1029,9 @@ function renderCode(el) {
     ${(c.mapping || []).length ? `<div class="card"><h2>논문 ↔ 코드</h2><div class="tbl-wrap"><table class="tbl"><tr><th>논문</th><th>코드</th><th>비고</th></tr>
       ${c.mapping.map((r) => `<tr><td>${inl(r.paper)}</td><td>${r.url ? `<a href="${esc(r.url)}" target="_blank"><code>${esc(r.path)}</code></a>` : `<code>${esc(r.path)}</code>`}</td><td class="muted">${inl(r.note)}</td></tr>`).join("")}</table></div></div>` : ""}
     ${c.how_to_read ? `<div class="card"><h2>읽는 순서</h2><div class="md">${md(c.how_to_read)}</div></div>` : ""}
-    <div class="muted small" style="text-align:right">${esc(c.created || "")} · ${busy ? "다시 찾는 중…" : '<a href="#" data-act="code">다시 찾기</a>'}</div>`;
+    <div class="muted small" style="text-align:right;margin-bottom:12px">${esc(c.created || "")} · ${c.source === "user" ? "직접 지정한 저장소" : "자동으로 찾은 저장소"}</div>
+    ${picker}`;
+  bindPicker();
 }
 
 function renderSlides(el) {
@@ -1092,7 +1165,7 @@ function renderGlobalPending() {
   const box = $("#gPending");
   if (!box) return;
   const pend = S.jobs.filter((j) => j.kind === "global" && ["queued", "running"].includes(j.status));
-  const html = pend.map((j) => `<div class="pending live" style="margin-bottom:8px"><div class="pend-h"><span class="spinner"></span><b>라이브러리 질문</b><span class="muted small">${esc(j.message || "대기 중")}</span></div>${j.partial ? `<div class="md stream">${md(j.partial)}</div>` : ""}</div>`).join("");
+  const html = pend.map((j) => `<div class="pending live" style="margin-bottom:8px"><div class="pend-h"><span class="spinner"></span><b>라이브러리 질문</b><span class="muted small">${esc(j.message || "대기 중")}</span></div>${j.partial ? `<div class="md stream">${streamHtml(j.partial)}</div>` : ""}</div>`).join("");
   if (html !== S.gPendingHtml) { box.innerHTML = html; S.gPendingHtml = html; }
 }
 
@@ -1169,7 +1242,7 @@ async function pollJobs() {
   if (S.view === "global") renderGlobalPending();
   // 질문 답을 기다릴 때는 더 자주 물어봐서 답이 써지는 모습을 부드럽게 보여 줌
   const asking = active.some((j) => j.kind === "ask" || j.kind === "global");
-  pollTimer = setTimeout(pollJobs, asking ? 600 : active.length ? 1500 : 5000);
+  pollTimer = setTimeout(pollJobs, asking ? 1200 : active.length ? 1500 : 5000);
 }
 
 $("#jobsBtn").addEventListener("click", (e) => {

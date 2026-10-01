@@ -273,7 +273,10 @@ def post_slides(h, q, body, key):
 @route("POST", r"/api/paper/([^/]+)/code")
 def post_code(h, q, body, key):
     _key(key)
-    return _job("code", key, "코드 연결 · " + _name(key), lambda p, s: pipeline.code(key, p))
+    url = (body.get("repo_url") or "").strip()
+    if url and not re.match(r"^https?://\S+$", url):
+        raise ApiError("저장소 주소는 https:// 로 시작해야 합니다.")
+    return _job("code", key, "코드 연결 · " + _name(key), lambda p, s: pipeline.code(key, p, url or None))
 
 
 @route("POST", r"/api/paper/([^/]+)/notion")

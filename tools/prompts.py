@@ -226,19 +226,25 @@ CODE_SCHEMA = obj({
 })
 
 
-def code(meta, overview_json, paper_txt_rel):
-    return HEAD + """작업: 이 논문의 코드 저장소를 찾아 논문의 모듈과 코드 파일을 연결하기
+def code(meta, overview_json, paper_txt_rel, repo_url=None):
+    if repo_url:
+        how = ("- 사용자가 저장소를 직접 지정했습니다: {}\n"
+               "  찾지 말고 이 저장소를 WebFetch 로 열어(README, 파일 목록, 주요 소스) 분석하세요. repo_url 은 이 주소 그대로.\n"
+               "  저장소에 들어갈 수 없으면 verified false 로 두고 summary 에 이유.").format(repo_url)
+    else:
+        how = "- WebSearch / WebFetch 로 공식 저장소(없으면 가장 널리 쓰이는 비공식 구현)를 찾으세요. 찾지 못하면 repo_url \"\" 로 두고 summary 에 이유."
+    return HEAD + """작업: 이 논문의 코드 저장소와 논문의 모듈을 코드 파일에 연결하기
 
 논문: {title} ({venue} {year}), 본문에 적힌 코드 주소: {code_url}
 원문: `{txt}`
 해설의 방법 흐름: {flow}
 
-- WebSearch / WebFetch 로 공식 저장소(없으면 가장 널리 쓰이는 비공식 구현)를 찾으세요. 찾지 못하면 repo_url "" 로 두고 summary 에 이유.
+{how}
 - official: 저자 공식 저장소인지. verified: 실제로 페이지를 열어 확인했는지.
 - mapping: 논문의 구성 요소(예: "Spatial Cross-Attention (§3.3)", "손실 함수 Eq. 5") → 저장소 안 파일 경로와 GitHub 링크. 실제로 확인한 경로만.
 - how_to_read: 코드를 어떤 순서로 보면 되는지 (진입점 → 모델 → 손실 → 설정 파일).
 """.format(title=meta.get("title"), venue=meta.get("venue", ""), year=meta.get("year", ""), code_url=meta.get("code_url") or "없음",
-           txt=paper_txt_rel, flow=json.dumps((overview_json or {}).get("method_flow", []), ensure_ascii=False)[:4000])
+           txt=paper_txt_rel, flow=json.dumps((overview_json or {}).get("method_flow", []), ensure_ascii=False)[:4000], how=how)
 
 
 COMPARE_SCHEMA = obj({"title": S, "columns": SA, "rows": arr(obj({"aspect": S, "values": SA})), "summary": S})

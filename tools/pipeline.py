@@ -303,14 +303,16 @@ def slides(key, progress=_noop):
     exporter.export(key)
 
 
-def code(key, progress=_noop):
+def code(key, progress=_noop, repo_url=None):
+    """repo_url 을 주면 찾지 않고 그 저장소를 분석합니다 (자동 찾기가 엉뚱한 저장소를 고를 때)."""
     m = library.load_meta(key)
     library.ensure_pages(key)
-    progress(0, 1, "코드 저장소 찾는 중")
-    res = claude.run(prompts.code(m, library.load_overview(key), "library/{}/paper.txt".format(key)),
+    progress(0, 1, "지정한 저장소 분석 중" if repo_url else "코드 저장소 찾는 중")
+    res = claude.run(prompts.code(m, library.load_overview(key), "library/{}/paper.txt".format(key), repo_url),
                      "code", prompts.CODE_SCHEMA, tools=("Read", "WebSearch", "WebFetch"), key=key)
     d = res["data"]
     d["created"] = now_str()
+    d["source"] = "user" if repo_url else "auto"
     save_json(library.paper_dir(key) / "code.json", d)
     progress(1, 1, "완료")
     exporter.export(key)
