@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Reader</title>
+<meta name="rp-token" content="__RP_TOKEN__">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-256.png" sizes="256x256" type="image/png">
+<link rel="stylesheet" href="/vendor/katex/katex.min.css">
+<link rel="stylesheet" href="/app.css">
+<script src="/vendor/marked.min.js"></script>
+<script src="/vendor/katex/katex.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo"></span>Paper Reader</div>
+  <div class="search">
+    <svg viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M13 13l4 4"/></svg>
+    <input id="searchInput" placeholder="라이브러리 검색 — 본문·번역·Q&A·메모·해설" autocomplete="off">
+  </div>
+  <nav class="top-actions">
+    <button class="btn pearl" data-view="global">라이브러리 질문</button>
+    <button class="btn pearl" data-view="compare">비교표</button>
+    <button class="btn pearl" data-view="lineage">계보도</button>
+    <button class="btn pearl" id="jobsBtn"><span class="spinner" hidden></span><span id="jobsLabel">작업 없음</span></button>
+  </nav>
+</header>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="side-head">
+      <div class="seg" id="readingFilter">
+        <button data-f="all" class="on">전체</button><button data-f="todo">읽을 예정</button><button data-f="reading">읽는 중</button><button data-f="done">완료</button>
+      </div>
+    </div>
+    <div class="paper-list" id="paperList"></div>
+    <div class="side-foot">
+      <div class="field-row">
+        <input id="arxivInput" class="field" placeholder="arXiv 링크·번호로 추가">
+        <button class="btn primary sm" id="arxivBtn">추가</button>
+      </div>
+      <div class="foot-note" id="footNote">PDF 를 <b>papers</b> 폴더에 넣으면 자동으로 나타납니다</div>
+    </div>
+  </aside>
+
+  <main class="main" id="main"></main>
+
+  <aside class="panel" id="panel">
+    <div class="panel-head">
+      <div class="seg" id="panelSeg"><button data-p="ask" class="on">질문</button><button data-p="pdf">PDF</button></div>
+    </div>
+    <div class="panel-body" id="panelAsk">
+      <div class="anchor-chip" id="anchorChip" hidden></div>
+      <div class="ask-box">
+        <textarea id="askInput" rows="4" placeholder="이 논문에 대해 물어보세요. 문단에 마우스를 올려 📌 를 누르면 그 문단에 대해 물을 수 있습니다.  (Ctrl+Enter)"></textarea>
+        <div class="ask-actions">
+          <button class="btn ghost sm" id="newSessionBtn" title="Claude 가 이 논문에 대해 이어 온 대화를 끊고 새로 시작합니다">새 대화로</button>
+          <button class="btn primary" id="askBtn">질문하기</button>
+        </div>
+      </div>
+      <div id="pendingAsk" class="recent-qa"></div>
+      <div class="panel-sub">최근 답변</div>
+      <div id="recentQa" class="recent-qa"></div>
+    </div>
+    <div class="panel-body pdf" id="panelPdf" hidden>
+      <iframe id="pdfFrame" title="PDF"></iframe>
+    </div>
+  </aside>
+</div>
+
+<div class="popover" id="jobsPop" hidden></div>
+<div class="toasts" id="toasts"></div>
+<div class="modal-back" id="modal" hidden><div class="modal" id="modalBody"></div></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

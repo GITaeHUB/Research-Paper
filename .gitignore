@@ -1,0 +1,17 @@
+# ---- 개인 데이터: 올리지 않음 ----
+# 논문 PDF
+papers/
+# 논문별 번역·해설·Q&A·메모 (library), 자동 생성 문서 (exports), 전체 기록·용어집·사용량·Notion id (data)
+library/
+exports/
+data/
+# 개인 설정 (Notion 토큰 등) — 예시는 config.local.example.json
+config.local.json
+# 앱 창 전용 브라우저 프로필
+.app-profile/
+
+# ---- 파이썬 · 기타 ----
+__pycache__/
+*.pyc
+*.tmp
+.vscode/

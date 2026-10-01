@@ -1,0 +1,5 @@
+{
+ "notion_token": "ntn_여기에_Notion_통합_토큰",
+ "notion_parent": "Papers 데이터베이스를 만들 Notion 페이지 id (페이지 링크 끝의 32자리)",
+ "models": {"translate": "sonnet", "analyze": "sonnet", "overview": "opus", "qa": "opus"}
+}

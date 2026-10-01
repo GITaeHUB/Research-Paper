@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a84ff"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#1b1464" flood-opacity=".28"/>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+  <!-- 논문 종이 (오른쪽 위 접힌 모서리) -->
+  <g filter="url(#sh)">
+    <path d="M76 42h76l44 44v122a14 14 0 0 1-14 14H76a14 14 0 0 1-14-14V56a14 14 0 0 1 14-14z" fill="#fff"/>
+  </g>
+  <path d="M152 42v30a14 14 0 0 0 14 14h30z" fill="#cfe0ff"/>
+  <!-- 원문 (회색) -->
+  <rect x="84" y="96" width="70" height="10" rx="5" fill="#c7c7cc"/>
+  <rect x="84" y="116" width="92" height="10" rx="5" fill="#c7c7cc"/>
+  <!-- 번역 (파랑) -->
+  <rect x="84" y="146" width="92" height="12" rx="6" fill="#0071e3"/>
+  <rect x="84" y="168" width="58" height="12" rx="6" fill="#0071e3"/>
+  <!-- Q&A 말풍선 -->
+  <g filter="url(#sh)">
+    <path d="M190 150a42 38 0 1 1-26 72l-20 8 6-18a42 38 0 0 1 40-62z" fill="#ff9f0a"/>
+  </g>
+  <circle cx="172" cy="188" r="6.5" fill="#fff"/>
+  <circle cx="191" cy="188" r="6.5" fill="#fff"/>
+  <circle cx="210" cy="188" r="6.5" fill="#fff"/>
+</svg>
