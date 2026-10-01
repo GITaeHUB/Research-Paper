@@ -16,7 +16,12 @@ const authUrl = (u) => u + (u.includes("?") ? "&" : "?") + "t=" + encodeURICompo
 
 const api = {
   async req(method, path, body) {
-    const r = await fetch(path, { method, headers: { "Content-Type": "application/json", "X-RP-Token": TOKEN }, body: body ? JSON.stringify(body) : undefined });
+    let r;
+    try {
+      r = await fetch(path, { method, headers: { "Content-Type": "application/json", "X-RP-Token": TOKEN }, body: body ? JSON.stringify(body) : undefined });
+    } catch (e) {
+      throw new Error("프로그램 서버와 연결이 끊겼습니다. 창을 닫고 Paper Reader 를 다시 열어 주세요.");
+    }
     if (r.status === 403) {
       const d = await r.json().catch(() => ({}));
       throw new Error(d.error || "인증 실패 — 창을 새로 고침(F5) 해 주세요.");
@@ -150,17 +155,32 @@ async function folderApi(body) {
   await loadLibrary();
   if (S.paper) { const ph = $(".phead"); if (ph) ph.outerHTML = headerHtml(S.paper); }
 }
+// 이름 입력 창 (브라우저 기본 prompt 는 화면을 멈춰서 쓰지 않음)
+function askName(title, value, placeholder) {
+  return new Promise((resolve) => {
+    modal(`<h3>${esc(title)}</h3><input id="nameInput" class="field" value="${esc(value || "")}" placeholder="${esc(placeholder || "")}" style="margin-top:10px">
+      <div class="row"><button class="btn pearl" id="nameCancel">취소</button><button class="btn primary" id="nameOk">확인</button></div>`);
+    const inp = $("#nameInput");
+    inp.focus();
+    inp.select();
+    const done = (v) => { closeModal(); resolve(v); };
+    $("#nameOk").onclick = () => done(inp.value.trim());
+    $("#nameCancel").onclick = () => done(null);
+    inp.onkeydown = (e) => { if (e.key === "Enter") done(inp.value.trim()); if (e.key === "Escape") done(null); };
+  });
+}
 async function newFolder(key) {
-  const name = prompt("새 폴더 이름 (예: BEV Perception, Motion Forecasting, 읽을 후보)");
-  if (name && name.trim()) await run(() => folderApi({ action: "create", name: name.trim(), key }));
+  const name = await askName("새 폴더", "", "예: BEV Perception, Motion Forecasting, 읽을 후보");
+  if (name) await run(() => folderApi({ action: "create", name, key }));
+  else if (key) { const ph = $(".phead"); if (ph && S.paper) ph.outerHTML = headerHtml(S.paper); }   // 취소하면 선택 상자를 원래대로
 }
 $("#paperList").addEventListener("click", async (e) => {
   if (e.target.closest("#addFolder")) return newFolder();
   const rn = e.target.closest("[data-frename]");
   if (rn) {
     const f = S.folders.find((x) => x.id === rn.dataset.frename);
-    const name = prompt("폴더 이름", f ? f.name : "");
-    if (name && name.trim()) await run(() => folderApi({ action: "rename", id: rn.dataset.frename, name: name.trim() }));
+    const name = await askName("폴더 이름 바꾸기", f ? f.name : "");
+    if (name) await run(() => folderApi({ action: "rename", id: rn.dataset.frename, name }));
     return;
   }
   const dl = e.target.closest("[data-fdel]");

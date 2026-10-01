@@ -55,15 +55,13 @@ def main():
         open_window(url)
         return
     srv = server.serve_in_thread()
-    proc = open_window(url)
+    open_window(url)
     server.LAST_PING[0] = time.time()
+    # 창은 5초마다 신호를 보냅니다 (최소화하면 브라우저가 1분에 한 번으로 줄임).
+    # Edge 실행 프로세스는 창을 넘겨주고 바로 끝나는 경우가 많아 종료 판단에 쓰지 않고,
+    # 신호가 2분 동안 없고 진행 중인 작업도 없을 때만 서버를 끕니다.
     while True:
         time.sleep(5)
-        window_gone = (proc is not None and proc.poll() is not None) or time.time() - server.LAST_PING[0] > 60
-        if window_gone and not jobs.busy():
-            # 창이 닫히고 할 일이 없으면 종료 (잠깐 다시 열 시간을 줌)
-            time.sleep(3)
-            if time.time() - server.LAST_PING[0] > 8 and not jobs.busy():
-                break
-            proc = None
+        if time.time() - server.LAST_PING[0] > 120 and not jobs.busy():
+            break
     srv.shutdown()
