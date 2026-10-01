@@ -43,7 +43,7 @@ def overview_md(key, heading=True):
     ov = library.load_overview(key)
     out = []
     if heading:
-        out.append("# 📘 해설 · {}\n".format(display_name(m)))
+        out.append("# 해설 · {}\n".format(display_name(m)))
     meta_line = " · ".join(x for x in [", ".join(m.get("authors", [])[:6]) + (" 외" if len(m.get("authors", [])) > 6 else ""),
                                         "{} {}".format(m.get("venue", ""), m.get("year", "")).strip(), m.get("task", "")] if x)
     if meta_line:
@@ -126,17 +126,17 @@ def block_md(b, note=None):
         orig = b.get("orig", "").replace("\n", "\n> ")
         lines.append("<sub>§{}</sub>\n\n> {}\n\n{}".format(b["id"], orig, b.get("ko", "")))
     if b.get("note"):
-        lines.append("\n💡 " + b["note"])
+        lines.append("\n> **해설** " + b["note"])
     if note:
         if note.get("memo"):
-            lines.append("\n📝 **내 메모:** " + note["memo"])
+            lines.append("\n**내 메모:** " + note["memo"])
     return "\n".join(lines) + "\n"
 
 
 def translation_md(key, heading=True):
     m = library.load_meta(key)
     notes = library.load_notes(key)
-    out = ["# 📄 원문 · 번역 · {}\n".format(display_name(m))] if heading else []
+    out = ["# 원문 · 번역 · {}\n".format(display_name(m))] if heading else []
     for i, u in enumerate(m.get("units", [])):
         if u["kind"] == "references":
             continue
@@ -169,7 +169,7 @@ def qa_sorted(key, order="section"):
 def qa_md(key, heading=True):
     m = library.load_meta(key)
     items = qa_sorted(key)
-    out = ["# 💬 Q&A · {}\n".format(display_name(m))] if heading else []
+    out = ["# Q&A · {}\n".format(display_name(m))] if heading else []
     out.append("_논문 순서대로 정렬 · {}개_\n".format(len(items)))
     for q in items:
         tags = " ".join("#" + t for t in q.get("tags", []))
@@ -190,7 +190,7 @@ def code_md(key, heading=True):
     d = load_json(library.paper_dir(key) / "code.json", None)
     if not d:
         return ""
-    out = ["# 🧩 코드 · {}\n".format(display_name(m))] if heading else []
+    out = ["# 코드 · {}\n".format(display_name(m))] if heading else []
     tag = "공식" if d.get("official") else "비공식"
     out.append("**저장소:** {} ({}{}) · {}\n".format(d.get("repo_url") or "찾지 못함", tag, "" if d.get("verified") else ", 미확인",
                                                     d.get("framework", "")))
@@ -227,7 +227,7 @@ def export(key):
     write_text(d / "Q&A.md", qa_md(key))
     s = slides_md(key)
     if s:
-        write_text(d / "발표요약.md", "# 🎤 발표 요약 · {}\n\n{}".format(display_name(m), s))
+        write_text(d / "발표요약.md", "# 발표 요약 · {}\n\n{}".format(display_name(m), s))
     c = code_md(key)
     if c:
         write_text(d / "코드.md", c)

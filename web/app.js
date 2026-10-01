@@ -98,7 +98,7 @@ async function loadLibrary() {
   S.limits = d.limits;
   renderLimits();
   S.notionReady = d.notion;
-  if (!d.claude) $("#footNote").innerHTML = "⚠️ Claude 실행 파일을 찾지 못했습니다. VS Code 의 Claude Code 확장을 확인하세요.";
+  if (!d.claude) $("#footNote").innerHTML = "Claude 실행 파일을 찾지 못했습니다. VS Code 의 Claude Code 확장을 확인하세요.";
   renderLibrary();
 }
 
@@ -336,30 +336,37 @@ function renderOverview(el) {
   const P = { must: ["꼭 읽기", ""], later: ["나중에", "gray"], skip: ["건너뛰어도 됨", "gray"] };
   const link = (t, u) => u ? `<a href="${esc(u)}" target="_blank">${esc(t)}</a>` : esc(t);
   const rel = ov.related || [];
+  const regenBusy = (S.paper.busy || []).some((j) => j.kind === "overview");
   el.innerHTML = `
+    <div class="ov-bar"><span class="muted small">${esc(ov.created || "")} · ${esc(ov.model || "")} 이 만든 해설</span>
+      ${regenBusy ? '<span class="pending" style="padding:6px 12px"><span class="spinner"></span>다시 만드는 중…</span>' : '<button class="btn pearl sm" id="ovRegen">다시 만들기</button>'}</div>
     <div class="card hero"><h2>한 줄 요약</h2><div class="big">${inl(ov.one_liner)}</div></div>
-    ${(ov.prerequisites || []).length ? `<div class="card"><h2>📚 읽기 전에 알아야 할 배경</h2><div class="prereq">${ov.prerequisites.map((x) => `<div><b>${esc(x.concept)}</b>${md(x.explain)}</div>`).join("")}</div></div>` : ""}
+    ${(ov.prerequisites || []).length ? `<div class="card"><h2>읽기 전에 알아야 할 배경</h2><div class="prereq">${ov.prerequisites.map((x) => `<div><b>${esc(x.concept)}</b>${md(x.explain)}</div>`).join("")}</div></div>` : ""}
     <div class="grid2">
-      <div class="card"><h2>🎯 풀려는 문제</h2><div class="md">${md(ov.problem)}</div></div>
-      <div class="card"><h2>💡 핵심 아이디어</h2><div class="md">${md(ov.key_idea)}</div></div>
+      <div class="card"><h2>풀려는 문제</h2><div class="md">${md(ov.problem)}</div></div>
+      <div class="card"><h2>핵심 아이디어</h2><div class="md">${md(ov.key_idea)}</div></div>
     </div>
-    <div class="card"><h2>🔀 방법 흐름</h2><div class="flow">${(ov.method_flow || []).map((s) => `<div><b>${esc(s.step)}</b><div class="md">${md(s.detail)}</div>${s.shape ? `<span class="shape">${esc(s.shape)}</span>` : ""}</div>`).join("")}</div></div>
-    <div class="card"><h2>🧭 읽기 가이드</h2><div class="guide">${(ov.reading_guide || []).map((g) => `<div><span class="pill ${P[g.priority]?.[1] || ""}">${P[g.priority]?.[0] || g.priority}</span><div><b>${esc(g.target)}</b> — <span class="muted">${inl(g.why)}</span></div></div>`).join("")}</div></div>
-    <div class="card"><h2>🗺️ Task 내 위치</h2><div class="md">${md(ov.task_position)}</div>
+    <div class="card"><h2>방법 흐름</h2><div class="flow">${(ov.method_flow || []).map((s) => `<div><b>${esc(s.step)}</b><div class="md">${md(s.detail)}</div>${s.shape ? `<span class="shape">${esc(s.shape)}</span>` : ""}</div>`).join("")}</div></div>
+    <div class="card"><h2>읽기 가이드</h2><div class="guide">${(ov.reading_guide || []).map((g) => `<div><span class="pill ${P[g.priority]?.[1] || ""}">${P[g.priority]?.[0] || g.priority}</span><div><b>${esc(g.target)}</b> — <span class="muted">${inl(g.why)}</span></div></div>`).join("")}</div></div>
+    <div class="card"><h2>Task 내 위치</h2><div class="md">${md(ov.task_position)}</div>
       ${(ov.timeline || []).length ? `<h3>연구 흐름</h3><div class="timeline">${ov.timeline.map((t) => `<div class="${t.role === "this" ? "this" : ""}"><span class="yr">${esc(t.year)}</span><span class="nm">${link(t.title, t.url)}</span> <span class="muted small">${esc(t.venue || "")}</span>${t.verified === false ? ' <span class="pill amber">미확인</span>' : ""}<div class="nt">${inl(t.note)}</div></div>`).join("")}</div>` : ""}
     </div>
-    ${rel.length ? `<div class="card related"><h2>🔗 관련 중요 논문</h2>${Object.keys(G).map((g) => {
+    ${rel.length ? `<div class="card related"><h2>관련 중요 논문</h2>${Object.keys(G).map((g) => {
       const items = rel.filter((r) => r.group === g);
       if (!items.length) return "";
       return `<h3>${G[g]}</h3>` + items.map((r) => `<div class="r"><span class="nm">${link(r.title, r.url)}</span> <span class="muted small">${esc(r.venue || "")} ${esc(r.year || "")}</span>
         ${r.source === "references" && r.ref_no ? `<span class="pill gray">참고문헌 [${esc(r.ref_no)}]</span>` : r.verified ? '<span class="pill green">웹 확인</span>' : '<span class="pill amber">미확인</span>'}
         <div class="df">${inl(r.diff)}</div></div>`).join("");
     }).join("")}</div>` : ""}
-    ${(ov.results || []).length ? `<div class="card"><h2>📊 결과 요약</h2><div class="tbl-wrap"><table class="tbl"><tr><th>벤치마크</th><th>지표</th><th>이 논문</th><th>이전 최고</th><th>비고</th></tr>
+    ${(ov.results || []).length ? `<div class="card"><h2>결과 요약</h2><div class="tbl-wrap"><table class="tbl"><tr><th>벤치마크</th><th>지표</th><th>이 논문</th><th>이전 최고</th><th>비고</th></tr>
       ${ov.results.map((r) => `<tr><td>${esc(r.benchmark)}</td><td>${esc(r.metric)}</td><td><b>${esc(r.value)}</b></td><td>${esc(r.prev_best)}</td><td class="muted">${inl(r.note)}</td></tr>`).join("")}</table></div>
       ${ov.results_note ? `<div class="md" style="margin-top:14px">${md(ov.results_note)}</div>` : ""}</div>` : ""}
-    <div class="card"><h2>⚖️ 한계 & 열린 질문</h2><div class="md">${md(ov.limitations)}</div></div>
-    <div class="muted small" style="text-align:right">${esc(ov.created || "")} · ${esc(ov.model || "")} · <a href="#" data-act="overview">다시 만들기</a></div>`;
+    <div class="card"><h2>한계 & 열린 질문</h2><div class="md">${md(ov.limitations)}</div></div>`;
+  const rg = $("#ovRegen");
+  if (rg) rg.onclick = () => {
+    if (!confirm("해설을 처음부터 새로 만들어 지금 해설을 바꿉니다.\n(Opus · 관련 논문 확인 포함 2~4분, 토큰을 씁니다. 다 만들어질 때까지 지금 해설은 그대로 보입니다.)")) return;
+    doAction("overview", rg);
+  };
 }
 
 // ---------- 원문 · 번역 탭 ----------
@@ -400,7 +407,7 @@ function renderReader(el) {
 }
 
 // ---------- 그림 · 표 이미지 (PDF.js 로 쪽을 그리고 캡션 위치로 그림 영역만 잘라 냄) ----------
-const RECROP_BTN = '<button class="btn pearl sm recrop" data-recrop title="그림 영역을 직접 끌어서 다시 고릅니다">✂ 다시 자르기</button>';
+const RECROP_BTN = '<button class="btn pearl sm recrop" data-recrop title="그림 영역을 직접 끌어서 다시 고릅니다">다시 자르기</button>';
 let pdfLibReady = null;
 const pdfDocs = {};
 let figQueue = Promise.resolve();
@@ -453,7 +460,7 @@ async function showFigure(box, key) {
     await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
     if (!rect) {
       // 캡션을 못 찾으면 쪽 전체를 작게 (저장하지 않음)
-      box.innerHTML = `<img src="${canvas.toDataURL("image/jpeg", 0.85)}" class="whole"><div class="fig-note">그림 위치를 찾지 못해 ${box.dataset.page}쪽 전체를 보여 줍니다 — ✂ 다시 자르기로 직접 고를 수 있습니다</div>${RECROP_BTN}`;
+      box.innerHTML = `<img src="${canvas.toDataURL("image/jpeg", 0.85)}" class="whole"><div class="fig-note">그림 위치를 찾지 못해 ${box.dataset.page}쪽 전체를 보여 줍니다 — '다시 자르기' 로 직접 고를 수 있습니다</div>${RECROP_BTN}`;
       return;
     }
     const t = trimWhite(canvas, rect);
@@ -585,11 +592,11 @@ function blockHtml(b, note, qas) {
   const t = b.type;
   const hl = "";
   const sel = S.anchor === b.id ? " sel" : "";
-  const tools = [`<button data-b="ask" title="이 블록에 대해 질문">📌 질문</button>`];
+  const tools = [`<button data-b="ask" title="이 블록에 대해 질문">질문</button>`];
   if (t === "equation") tools.push(`<button data-b="equation">∑ 수식 풀이</button>`);
-  else if (t === "figure" || t === "table") tools.push(`<button data-b="figure">🖼 ${t === "table" ? "표" : "그림"} 해설</button>`);
-  else tools.push(`<button data-b="explain">💡 깊게 해설</button>`);
-  tools.push(`<button data-b="memo" title="메모">✎ 메모</button>`);
+  else if (t === "figure" || t === "table") tools.push(`<button data-b="figure">${t === "table" ? "표" : "그림"} 해설</button>`);
+  else tools.push(`<button data-b="explain">깊게 해설</button>`);
+  tools.push(`<button data-b="memo" title="메모">메모</button>`);
   if (b.page) tools.push(`<button data-b="page" title="PDF 에서 보기">p.${b.page}</button>`);
   let inner;
   if (t === "equation") {
@@ -603,13 +610,13 @@ function blockHtml(b, note, qas) {
   } else {
     inner = `<div class="orig">${withMarks(inl(b.orig), note, "orig")}</div><div class="ko">${withMarks(inl(b.ko), note, "ko")}</div>`;
   }
-  const noteHtml = b.note ? `<div class="note">💡 ${inl(b.note)}</div>` : "";
+  const noteHtml = b.note ? `<div class="note"><b>해설</b> ${inl(b.note)}</div>` : "";
   const memo = note && note.memo ? `<div class="memo">${esc(note.memo)}</div>` : "";
   // 깊게 해설 · 그림 해설 · 수식 풀이는 문단 바로 아래 카드로, 일반 Q&A 는 💬 안에
   const exps = (qas || []).filter((q) => q.kind !== "qa");
   const qs = (qas || []).filter((q) => q.kind === "qa");
   const expHtml = exps.length ? `<div class="explains">${exps.map((q) => qaHtml(q, S.justAnswered === q.id, "explain")).join("")}</div>` : "";
-  const qa = qs.length ? `<details class="qa-inline" ${qs.some((q) => q.id === S.justAnswered) ? "open" : ""}><summary>💬 Q&A ${qs.length}</summary>${qs.map((q) => qaHtml(q, S.justAnswered === q.id)).join("")}</details>` : "";
+  const qa = qs.length ? `<details class="qa-inline" ${qs.some((q) => q.id === S.justAnswered) ? "open" : ""}><summary>Q&A ${qs.length}</summary>${qs.map((q) => qaHtml(q, S.justAnswered === q.id)).join("")}</details>` : "";
   return `<div class="blk ${t}${hl}${sel}" id="b-${esc(b.id)}" data-id="${esc(b.id)}" data-type="${t}" data-page="${b.page || ""}">
     <span class="bid">${esc(b.id)}</span><div class="tools">${tools.join("")}</div>${inner}${noteHtml}${memo}${expHtml}${qa}</div>`;
 }
@@ -701,7 +708,7 @@ function qaHtml(q, open, cls) {
   const anchorBtn = q.anchor && q.anchor !== "all" ? `<button class="btn ghost sm" data-jump="${esc(q.anchor)}">본문에서 보기</button>` : "";
   return `<details class="qa ${cls || ""}" ${open ? "open" : ""} data-qid="${esc(q.id)}">
     <summary>${CHEV}<span class="pill ${q.anchor === "all" ? "gray" : ""}">${esc(q.tag || "전체")}</span><span class="ttl">${esc(q.title || q.question)}</span>
-      <span class="meta">${q.kind !== "qa" ? `<span class="pill amber">${KIND[q.kind]}</span>` : ""}${(q.tags || []).map((t) => `<span>#${esc(t)}</span>`).join("")}<span>${fmtTs(q.ts)}</span></span></summary>
+      <span class="meta">${q.kind !== "qa" ? `<span class="pill amber">${KIND[q.kind]}</span>` : ""}${(q.tags || []).map((t) => `<span>#${esc(t)}</span>`).join("")}<span>${fmtTs(q.ts)}</span><button class="sum-del" data-delqa="${esc(q.id)}" title="삭제">삭제</button></span></summary>
     <div class="body">
       ${q.question ? `<div class="q"><b>질문</b> ${esc(q.question)}</div>` : ""}
       <div class="md">${md(q.answer)}</div>
@@ -720,7 +727,7 @@ function renderQaTab(el) {
       ${Object.keys(KIND).filter((k) => k !== "qa" && items.some((q) => q.kind === k)).map((k) => `<button class="chip ${S.qaTag === "k:" + k ? "on" : ""}" data-tag="k:${k}">${KIND[k]}</button>`).join("")}
       ${tags.map((t) => `<button class="chip ${S.qaTag === t ? "on" : ""}" data-tag="${esc(t)}">#${esc(t)}</button>`).join("")}</div>
     </div>
-    ${shown.length ? shown.map((q) => qaHtml(q)).join("") : `<div class="callout"><div><b>아직 Q&A 가 없습니다</b><p>오른쪽 패널에서 질문하거나, 원문·번역 탭에서 문단에 마우스를 올려 📌 질문 / 💡 깊게 해설을 눌러 보세요.</p></div></div>`}`;
+    ${shown.length ? shown.map((q) => qaHtml(q)).join("") : `<div class="callout"><div><b>아직 Q&A 가 없습니다</b><p>오른쪽 패널에서 질문하거나, 원문·번역 탭에서 문단에 마우스를 올려 '질문' / '깊게 해설' 을 누르거나, 글자를 드래그해 보세요.</p></div></div>`}`;
 }
 
 document.addEventListener("click", async (e) => {
@@ -736,6 +743,7 @@ document.addEventListener("click", async (e) => {
   if (j) { e.preventDefault(); return jumpTo(j.dataset.jump); }
   const d = e.target.closest("[data-delqa]");
   if (d) {
+    e.preventDefault();   // 제목 줄의 삭제 버튼을 눌러도 토글이 열리지 않게
     if (!confirm("이 Q&A / 해설을 지울까요?")) return;
     await run(async () => { await api.post(`/api/paper/${S.key}/qa/delete`, { id: d.dataset.delqa }); S.recentSig = null; await reloadPaper(); });
   }
@@ -759,7 +767,7 @@ function renderAnchor() {
   const label = b && b.label ? b.label : "§" + S.anchor;
   const snip = b ? (b.type === "equation" ? b.ko || b.latex : b.ko || b.orig) : "";
   chip.hidden = false;
-  chip.innerHTML = `<button class="x" title="선택 해제 (Esc)">×</button><div>📌 <b>${esc(label)}</b> 에 대해 질문합니다</div>` +
+  chip.innerHTML = `<button class="x" title="선택 해제 (Esc)">×</button><div><b>${esc(label)}</b> 에 대해 질문합니다</div>` +
     (S.anchorSel ? `<div class="selq">“${esc(S.anchorSel)}”</div>` : `<div class="snip">${inl(snip)}</div>`);
   chip.querySelector(".x").onclick = () => setAnchor(null);
 }
@@ -925,13 +933,13 @@ function renderMemos(el) {
   const blocks = Object.fromEntries((S.units || []).flatMap((u) => u.blocks).map((b) => [b.id, b]));
   const ids = Object.keys(notes);
   if (!ids.length) {
-    el.innerHTML = `<div class="callout"><div><b>아직 메모가 없습니다</b><p>원문·번역 탭에서 문단에 마우스를 올려 🖍 하이라이트 / ✎ 메모를 남기면 여기에 모입니다. Notion 에도 함께 올라갑니다.</p></div></div>`;
+    el.innerHTML = `<div class="callout"><div><b>아직 메모가 없습니다</b><p>원문·번역 탭에서 글자를 드래그해 하이라이트하거나 문단의 '메모' 를 남기면 여기에 모입니다. Notion 에도 함께 올라갑니다.</p></div></div>`;
     return;
   }
   el.innerHTML = ids.map((id) => {
     const b = blocks[id] || {}, n = notes[id];
-    return `<div class="memo-item" data-jump="${esc(id)}"><div class="h small"><span class="pill">§${esc(id)}</span> ${n.hl ? '<span class="pill amber">🖍 하이라이트</span>' : ""}</div>
-      <div class="src">${inl(b.ko || b.orig || b.latex || "")}</div>${n.memo ? `<div style="white-space:pre-wrap">📝 ${esc(n.memo)}</div>` : ""}</div>`;
+    return `<div class="memo-item" data-jump="${esc(id)}"><div class="h small"><span class="pill">§${esc(id)}</span> ${(n.hls || []).length ? `<span class="pill amber">하이라이트 ${n.hls.length}</span>` : ""}</div>
+      <div class="src">${inl(b.ko || b.orig || b.latex || "")}</div>${(n.hls || []).map((h) => `<div class="small"><mark class="hlm">${esc(h.s)}</mark></div>`).join("")}${n.memo ? `<div style="white-space:pre-wrap;margin-top:6px"><b>메모</b> ${esc(n.memo)}</div>` : ""}</div>`;
   }).join("");
 }
 
@@ -944,7 +952,7 @@ function renderCode(el) {
       ${busy ? '<span class="spinner"></span>' : '<button class="btn primary" data-act="code">저장소 찾기</button>'}</div>`;
     return;
   }
-  el.innerHTML = `<div class="card"><h2>🧩 ${c.repo_url ? `<a href="${esc(c.repo_url)}" target="_blank">${esc(c.repo_url.replace(/^https?:\/\/(www\.)?github\.com\//, ""))}</a>` : "저장소를 찾지 못했습니다"}</h2>
+  el.innerHTML = `<div class="card"><h2>${c.repo_url ? `<a href="${esc(c.repo_url)}" target="_blank">${esc(c.repo_url.replace(/^https?:\/\/(www\.)?github\.com\//, ""))}</a>` : "저장소를 찾지 못했습니다"}</h2>
       <div style="display:flex;gap:6px;margin-bottom:10px">${c.repo_url ? `<span class="pill ${c.official ? "green" : "amber"}">${c.official ? "공식" : "비공식"}</span><span class="pill ${c.verified ? "gray" : "amber"}">${c.verified ? "확인됨" : "미확인"}</span>` : ""}${c.framework ? `<span class="pill gray">${esc(c.framework)}</span>` : ""}</div>
       <div class="md">${md(c.summary)}</div></div>
     ${(c.mapping || []).length ? `<div class="card"><h2>논문 ↔ 코드</h2><div class="tbl-wrap"><table class="tbl"><tr><th>논문</th><th>코드</th><th>비고</th></tr>
@@ -1032,7 +1040,7 @@ async function renderLineage() {
   if (!d) return;
   const body = $("#linBody");
   body.innerHTML = d.tasks.map((t, i) => `<div class="card"><h2>${esc(t.name)}</h2><div class="md muted" style="margin-bottom:12px">${md(t.summary)}</div><div class="graph-tools" data-g="${i}"><button class="btn pearl sm" data-z="-">－</button><span class="zoom" id="lz-${i}">100%</span><button class="btn pearl sm" data-z="+">＋</button><button class="btn pearl sm" data-z="fit">맞춤</button><button class="btn pearl sm" data-z="big">크게 보기</button></div><div class="lineage-graph" id="lg-${i}"></div></div>`).join("")
-    + (d.recommendations.length ? `<div class="card"><h2>📖 다음에 읽을 논문</h2>${d.recommendations.map((r) => `<div class="related"><div class="r"><span class="nm">${r.url ? `<a href="${esc(r.url)}" target="_blank">${esc(r.title)}</a>` : esc(r.title)}</span> <span class="muted small">${esc(r.venue || "")} ${esc(r.year || "")}</span> ${r.verified ? '<span class="pill green">확인</span>' : '<span class="pill amber">미확인</span>'}<div class="df">${inl(r.why)}</div></div></div>`).join("")}</div>` : "")
+    + (d.recommendations.length ? `<div class="card"><h2>다음에 읽을 논문</h2>${d.recommendations.map((r) => `<div class="related"><div class="r"><span class="nm">${r.url ? `<a href="${esc(r.url)}" target="_blank">${esc(r.title)}</a>` : esc(r.title)}</span> <span class="muted small">${esc(r.venue || "")} ${esc(r.year || "")}</span> ${r.verified ? '<span class="pill green">확인</span>' : '<span class="pill amber">미확인</span>'}<div class="df">${inl(r.why)}</div></div></div>`).join("")}</div>` : "")
     + `<div class="muted small" style="text-align:right">${esc(d.created)} · 논문 ${d.keys.length}편 기준</div>`;
   await loadMermaid();
   for (let i = 0; i < d.tasks.length; i++) {
@@ -1064,7 +1072,7 @@ async function renderGlobal() {
   if (S.view !== "global") return;
   const pend = S.jobs.filter((j) => j.kind === "global" && ["queued", "running"].includes(j.status));
   main.innerHTML = `<div class="wrap">${backBtn()}
-    <div class="card"><h2>📚 라이브러리 전체에 질문</h2><p class="muted small" style="margin-top:-6px">읽은 논문들의 해설 · 원문 · Q&A · 메모를 함께 찾아 답합니다. 예: "temporal fusion 을 다룬 논문들은 각각 어떻게 하지?"</p>
+    <div class="card"><h2>라이브러리 전체에 질문</h2><p class="muted small" style="margin-top:-6px">읽은 논문들의 해설 · 원문 · Q&A · 메모를 함께 찾아 답합니다. 예: "temporal fusion 을 다룬 논문들은 각각 어떻게 하지?"</p>
       <textarea id="gq" rows="3" placeholder="질문 (Ctrl+Enter)"></textarea><div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn primary" id="gqBtn">질문하기</button></div></div>
     <div id="gPending">${pend.length ? "" : ""}</div>
     ${items.map((q) => `<details class="qa"><summary>${CHEV}<span class="ttl">${esc(q.title || q.question)}</span><span class="meta">${q.papers.map((k) => `<span class="pill gray">${esc((S.papers.find((p) => p.key === k) || {}).short || k)}</span>`).join("")}<span>${fmtTs(q.ts)}</span></span></summary>
@@ -1232,7 +1240,7 @@ document.addEventListener("click", async (e) => {
 // ---------- 그림 다시 자르기: 쪽 위에서 끌어서 영역 고르기 ----------
 async function openRecrop(box) {
   const key = S.key, id = box.dataset.fig, pageNo = +box.dataset.page;
-  modal(`<div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0">✂ ${esc(box.dataset.label)} 다시 자르기</h3><span class="muted small">PDF ${pageNo}쪽 위에서 그림 영역을 끌어서 고르세요</span><span style="flex:1"></span>
+  modal(`<div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0">${esc(box.dataset.label)} 다시 자르기</h3><span class="muted small">PDF ${pageNo}쪽 위에서 그림 영역을 끌어서 고르세요</span><span style="flex:1"></span>
     <button class="btn pearl" data-close>취소</button><button class="btn primary" id="cropSave" disabled>저장</button></div>
     <div class="crop-wrap" id="cropWrap"><div class="fig-ph">쪽을 그리는 중…</div></div>`);
   $("#modalBody").className = "modal wide";
@@ -1283,9 +1291,14 @@ async function openRecrop(box) {
 }
 
 // ---------- 화면 테마: 자동(윈도우 설정) → 밝게 → 어둡게 ----------
+const THEME_ICON = {   // 선 아이콘 (자동 = 반쪽 원, 밝게 = 해, 어둡게 = 달)
+  auto: '<svg viewBox="0 0 20 20" width="16" height="16"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 3a7 7 0 0 1 0 14z" fill="currentColor"/></svg>',
+  light: '<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="3.6"/><path d="M10 1.8v2M10 16.2v2M1.8 10h2M16.2 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4"/></svg>',
+  dark: '<svg viewBox="0 0 20 20" width="16" height="16"><path d="M15.5 12.6A6.6 6.6 0 0 1 7.4 4.5a6.6 6.6 0 1 0 8.1 8.1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+};
 function applyTheme(t) {
   if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
-  $("#themeBtn").textContent = { auto: "🌓", light: "☀️", dark: "🌙" }[t];
+  $("#themeBtn").innerHTML = THEME_ICON[t];
   $("#themeBtn").title = "화면 테마: " + { auto: "자동 (윈도우 설정)", light: "밝게", dark: "어둡게" }[t] + " — 누르면 바뀜";
 }
 applyTheme(pref.get("theme", "auto"));

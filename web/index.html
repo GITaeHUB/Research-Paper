@@ -36,7 +36,7 @@
 <div class="shell">
   <aside class="sidebar">
     <div class="side-head">
-      <div class="side-title"><span>라이브러리</span><button class="btn ghost sm" id="reloadBtn" title="papers 폴더를 다시 읽어 목록을 새로 고칩니다">↻ 새로 고침</button></div>
+      <div class="side-title"><span>라이브러리</span><button class="btn ghost sm" id="reloadBtn" title="papers 폴더를 다시 읽어 목록을 새로 고칩니다">새로 고침</button></div>
       <div class="seg" id="readingFilter">
         <button data-f="all" class="on">전체</button><button data-f="todo">읽을 예정</button><button data-f="reading">읽는 중</button><button data-f="done">완료</button>
       </div>
@@ -61,7 +61,7 @@
     <div class="panel-body" id="panelAsk">
       <div class="anchor-chip" id="anchorChip" hidden></div>
       <div class="ask-box">
-        <textarea id="askInput" rows="4" placeholder="이 논문에 대해 물어보세요. 문단에 마우스를 올려 📌 를 누르면 그 문단에 대해 물을 수 있습니다.  (Ctrl+Enter)"></textarea>
+        <textarea id="askInput" rows="4" placeholder="이 논문에 대해 물어보세요. 문단에 마우스를 올려 '질문' 을 누르거나 글자를 드래그하면 그 부분에 대해 물을 수 있습니다.  (Ctrl+Enter)"></textarea>
         <div class="ask-opts">
           <div class="seg sm" id="lenSeg" title="답변 길이"><button data-len="short">짧게</button><button data-len="normal">보통</button><button data-len="long">자세히</button></div>
           <div class="seg sm" id="modelSeg" title="깊게 = Opus (정확·느림), 절약 = Sonnet (토큰 적게·빠름)"><button data-model="">깊게</button><button data-model="sonnet">절약</button></div>
@@ -83,7 +83,7 @@
 
 <div class="popover" id="jobsPop" hidden></div>
 <div class="sel-pop" id="selPop" hidden>
-  <button data-sel="hl">🖍 하이라이트</button><button data-sel="ask">📌 이 부분 질문</button><button data-sel="explain">💡 이 부분 해설</button>
+  <button data-sel="hl">하이라이트</button><button data-sel="ask">이 부분 질문</button><button data-sel="explain">이 부분 해설</button>
 </div>
 <div class="toasts" id="toasts"></div>
 <div class="modal-back" id="modal" hidden><div class="modal" id="modalBody"></div></div>
