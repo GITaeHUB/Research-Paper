@@ -4,8 +4,21 @@ import json
 import os
 import re
 import threading
+import time
 
 LOCK = threading.RLock()
+
+
+def _replace(tmp, path):
+    """os.replace — Windows 에서 다른 쪽이 그 파일을 읽는 중이면 잠깐 막히므로 몇 번 다시 시도합니다."""
+    for i in range(20):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if i == 19:
+                raise
+            time.sleep(0.05)
 
 
 def now_str():
@@ -13,11 +26,20 @@ def now_str():
 
 
 def load_json(path, default=None):
-    try:
-        with open(str(path), encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return default
+    """없으면 default. 다른 쪽이 그 파일을 막 바꿔치기하는 중이라 못 읽으면(사용 중 · 반쯤 쓴 내용) 잠깐 기다렸다 다시."""
+    for i in range(10):
+        try:
+            with open(str(path), encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return default
+        except (PermissionError, ValueError):
+            if i == 9:
+                return default
+            time.sleep(0.05)
+        except OSError:
+            return default
+    return default
 
 
 def save_json(path, data):
@@ -27,7 +49,7 @@ def save_json(path, data):
     with LOCK:
         with open(str(tmp), "w", encoding="utf-8", newline="\n") as f:
             json.dump(data, f, ensure_ascii=False, indent=1)
-        os.replace(str(tmp), str(path))
+        _replace(str(tmp), str(path))
 
 
 def read_jsonl(path):
@@ -53,7 +75,7 @@ def write_jsonl(path, items):
         with open(str(tmp), "w", encoding="utf-8", newline="\n") as f:
             for it in items:
                 f.write(json.dumps(it, ensure_ascii=False) + "\n")
-        os.replace(str(tmp), str(path))
+        _replace(str(tmp), str(path))
 
 
 def append_jsonl(path, item):

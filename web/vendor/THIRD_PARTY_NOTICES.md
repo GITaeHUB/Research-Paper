@@ -6,5 +6,4 @@
 |---|---|---|---|
 | `marked.min.js` | [marked](https://github.com/markedjs/marked) | 12.0.2 | MIT — [LICENSE](https://github.com/markedjs/marked/blob/master/LICENSE.md) |
 | `katex/` | [KaTeX](https://github.com/KaTeX/KaTeX) | 0.16.11 | MIT — [LICENSE](https://github.com/KaTeX/KaTeX/blob/main/LICENSE) |
-| `mermaid.min.js` | [Mermaid](https://github.com/mermaid-js/mermaid) | 10.9.1 | MIT — [LICENSE](https://github.com/mermaid-js/mermaid/blob/develop/LICENSE) |
 | `pdf.min.js`, `pdf.worker.min.js` | [PDF.js](https://github.com/mozilla/pdf.js) (Mozilla) | 3.11.174 | Apache-2.0 — [LICENSE](https://github.com/mozilla/pdf.js/blob/master/LICENSE) |

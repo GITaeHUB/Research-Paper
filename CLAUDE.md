@@ -37,14 +37,14 @@
 ## 환경 제약
 - Windows 11 + PowerShell + VS Code. **Python 3.8**, 표준 라이브러리만 씁니다 (match 문, `str.removeprefix`, `list[int]` 힌트, `dict | dict` 금지).
 - 폴더 이름에 한글·공백이 있습니다. 경로는 따옴표로 감싸고, 코드에서는 `pathlib.Path` 를 씁니다. 파일은 UTF-8 + LF, 열 때 `encoding="utf-8"` 명시.
-- PDF 글 추출은 Git for Windows 의 `pdftotext` (`tools/pdf.py`). 화면 라이브러리(marked, KaTeX, mermaid)는 `web/vendor/` 에 받아 둔 것을 씁니다.
+- PDF 글 추출은 Git for Windows 의 `pdftotext` (`tools/pdf.py`). 화면 라이브러리(marked, KaTeX, PDF.js)는 `web/vendor/` 에 받아 둔 것을 씁니다.
 
 ## 구조
 | 위치 | 내용 |
 |---|---|
 | `papers/` | PDF (사용자가 넣음) |
 | `library/<key>/` | 논문별 데이터 원본: `meta.json`(메타·번역 단위·Q&A 세션), `pages.json`·`paper.txt`(원문), `sections/NN.json`(번역 블록), `overview.json`(해설), `qa.jsonl`, `notes.json`(메모·하이라이트), `glossary.json`, `slides.md`, `code.json` |
-| `data/` | `index.json`(PDF↔key), `glossary.json`(공용 용어집), `comparisons.json`, `lineage.json`, `global_qa.jsonl`, `notion.json`, `claude_log.jsonl`(호출·비용 기록) |
+| `data/` | `index.json`(PDF↔key), `glossary.json`(공용 용어집), `folders.json`(가상 폴더), `comparisons.json`, `global_qa.jsonl`, `notion.json`, `claude_log.jsonl`(호출·비용 기록) |
 | `exports/<논문>/` | **자동 생성** 마크다운: 해설.md · 원문·번역.md · Q&A.md (+ 발표요약.md · 코드.md). 직접 고치지 않습니다 (`python rp.py export`) |
 | `tools/` | `config`(모델·시간) · `claude`(호출) · `prompts`(요청문·스키마) · `pipeline`(분석·번역·해설·Q&A·버튼 작업) · `library` · `pdf` · `exporter` · `notion` · `server` · `jobs` · `app` · `search` · `arxiv` |
 | `web/` | 화면 (index.html · app.css · app.js) |

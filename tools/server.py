@@ -132,11 +132,6 @@ def get_comparisons(h, q):
     return {"items": load_json(config.DATA / "comparisons.json", []) or []}
 
 
-@route("GET", r"/api/lineage")
-def get_lineage(h, q):
-    return {"lineage": load_json(config.DATA / "lineage.json", None)}
-
-
 @route("GET", r"/api/global-qa")
 def get_global_qa(h, q):
     return {"items": list(reversed(read_jsonl(config.DATA / "global_qa.jsonl")))}
@@ -318,14 +313,6 @@ def post_compare_delete(h, q, body):
     return {"ok": True}
 
 
-@route("POST", r"/api/lineage/delete")
-def post_lineage_delete(h, q, body):
-    f = config.DATA / "lineage.json"
-    if f.exists():
-        f.unlink()
-    return {"ok": True}
-
-
 @route("POST", r"/api/global-qa/delete")
 def post_global_delete(h, q, body):
     from .utils import write_jsonl
@@ -340,11 +327,6 @@ def post_compare(h, q, body):
     if len(keys) < 2:
         raise ApiError("비교할 논문을 두 편 이상 골라 주세요.")
     return _job("compare", None, "비교표 · {}편".format(len(keys)), lambda p, s: pipeline.compare(keys, p), unique=False)
-
-
-@route("POST", r"/api/lineage")
-def post_lineage(h, q, body):
-    return _job("lineage", None, "계보도", lambda p, s: pipeline.lineage(p))
 
 
 @route("POST", r"/api/global-ask")

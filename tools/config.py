@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PAPERS = ROOT / "papers"          # PDF 넣는 곳
 LIBRARY = ROOT / "library"        # 논문별 데이터 (원본): library/<key>/*.json
-DATA = ROOT / "data"              # 라이브러리 전체 데이터 (색인, 용어집, 비교표, 계보도, 로그)
+DATA = ROOT / "data"              # 라이브러리 전체 데이터 (색인, 용어집, 폴더, 비교표, 로그)
 EXPORTS = ROOT / "exports"        # 사람이 읽는 마크다운 (자동 생성)
 WEB = ROOT / "web"                # 프로그램 화면 (html/css/js)
 
@@ -22,7 +22,6 @@ MODELS = {
     "slides": "opus",
     "code": "opus",
     "compare": "opus",
-    "lineage": "opus",
     "global": "opus",
 }
 
@@ -43,7 +42,6 @@ TIMEOUTS = {
     "slides": 900,
     "code": 1200,
     "compare": 1200,
-    "lineage": 1500,
     "global": 1200,
 }
 

@@ -265,29 +265,6 @@ def compare(papers):
 """.format(body=body)
 
 
-LINEAGE_SCHEMA = obj({
-    "tasks": arr(obj({"name": S, "summary": S,
-                      "nodes": arr(obj({"id": S, "title": S, "year": S, "venue": S, "key": S, "note": S})),
-                      "edges": arr(obj({"from": S, "to": S, "label": S}))})),
-    "recommendations": arr(obj({"title": S, "year": S, "venue": S, "why": S, "url": S, "verified": {"type": "boolean"}})),
-})
-
-
-def lineage(papers):
-    body = "\n\n".join("### [{}] {}\n{}".format(p["key"], p["title"], p["blob"]) for p in papers)
-    return HEAD + """작업: 내 라이브러리의 Task 계보도
-
-아래는 사용자가 읽은(읽고 있는) 논문들과 각 논문 해설의 timeline·related 입니다.
-
-{body}
-
-- tasks: Task 별 계보 그래프. nodes 는 라이브러리 논문 + 흐름을 이해하는 데 꼭 필요한 주요 논문 (Task 당 8~20개). 라이브러리에 있는 논문은 key 에 그 key, 없으면 "".
-  id 는 영문 짧은 식별자 (예: "bevformer"). edges 는 영향 관계 (from 이전 → to 이후), label 은 무엇을 이어받거나 바꿨는지 몇 단어.
-- recommendations: 다음에 읽으면 좋을 논문 3~6개와 이유. WebSearch 로 확인한 것만 verified true + url.
-- 관련 논문은 해설에 verified 로 확인된 것과 웹으로 확인한 것만 쓰세요. 지어낸 논문 금지.
-""".format(body=body)
-
-
 GLOBAL_SCHEMA = obj({"title": S, "answer": S, "papers": SA})
 
 

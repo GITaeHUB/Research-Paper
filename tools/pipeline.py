@@ -1,4 +1,4 @@
-"""논문 처리 단계: 분석 → 해설 → 번역(단위마다) · Q&A · 버튼 작업(발표 요약, 코드, 비교, 계보도, 라이브러리 질문).
+"""논문 처리 단계: 분석 → 해설 → 번역(단위마다) · Q&A · 버튼 작업(발표 요약, 코드, 비교, 라이브러리 질문).
 
 모든 함수는 progress(i, n, message) 콜백을 받을 수 있고, 결과는 library/<key>/ 에 바로 저장합니다.
 화면(서버)과 CLI(rp.py) 가 같은 함수를 부릅니다.
@@ -339,20 +339,6 @@ def compare(keys, progress=_noop):
         items = load_json(p, []) or []
         items.insert(0, d)
         save_json(p, items)
-    progress(1, 1, "완료")
-    return d
-
-
-def lineage(progress=_noop):
-    keys = [k for k in library.all_keys() if library.load_overview(k)]
-    if not keys:
-        raise claude.ClaudeError("해설이 만들어진 논문이 없습니다. 논문을 하나 이상 분석해 주세요.")
-    progress(0, 1, "계보도 만드는 중 ({}편)".format(len(keys)))
-    res = claude.run(prompts.lineage([_blob(k, full=False) for k in keys]), "lineage", prompts.LINEAGE_SCHEMA,
-                     tools=("Read", "WebSearch", "WebFetch"))
-    d = res["data"]
-    d["created"], d["keys"] = now_str(), keys
-    save_json(config.DATA / "lineage.json", d)
     progress(1, 1, "완료")
     return d
 

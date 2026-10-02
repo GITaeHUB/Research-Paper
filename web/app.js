@@ -268,17 +268,37 @@ async function openPaper(key, opts = {}) {
   if (S.panel === "pdf") showPdf();
 }
 
+let reloadSeq = 0;
 async function reloadPaper(keepScroll = true) {
   if (!S.key) return renderMain();
+  const key = S.key, seq = ++reloadSeq;
   const main = $("#main");
   const top = main.scrollTop;
+  const fetchAll = async () => {
+    const paper = await api.get("/api/paper/" + encodeURIComponent(key));
+    const units = needBlocks() ? (await api.get(`/api/paper/${encodeURIComponent(key)}/blocks`)).units : null;
+    return { paper, units };
+  };
+  let got;
   try {
-    S.paper = await api.get("/api/paper/" + encodeURIComponent(S.key));
+    got = await fetchAll();
   } catch (e) {
-    S.key = null; S.paper = null;
-    return renderMain();
+    await new Promise((r) => setTimeout(r, 400));   // 잠깐 뒤 한 번 더 (서버가 파일을 쓰는 순간과 겹친 경우)
+    try {
+      got = await fetchAll();
+    } catch (e2) {
+      if (seq !== reloadSeq || key !== S.key) return;
+      if (!S.paper || S.paper.meta.key !== key) {
+        main.innerHTML = `<div class="empty"><h2>논문을 불러오지 못했습니다</h2><div>${esc(e2.message)}</div>
+          <button class="btn primary" id="retryPaper" style="margin-top:8px">다시 시도</button></div>`;
+        $("#retryPaper").onclick = () => reloadPaper(false);
+      }
+      return;   // 이미 보던 논문이면 화면을 그대로 둠
+    }
   }
-  if (needBlocks()) S.units = (await api.get(`/api/paper/${encodeURIComponent(S.key)}/blocks`)).units;
+  if (seq !== reloadSeq || key !== S.key) return;   // 그사이 다른 논문을 골랐으면 늦게 온 응답은 버림
+  S.paper = got.paper;
+  if (got.units) S.units = got.units;
   renderMain();
   renderRecent();
   if (keepScroll) main.scrollTop = top;
@@ -300,7 +320,6 @@ function setTab(tab) {
 function renderMain() {
   const main = $("#main");
   if (S.view === "compare") return renderCompare();
-  if (S.view === "lineage") return renderLineage();
   if (S.view === "global") return renderGlobal();
   if (S.view === "search") return renderSearch();
   if (!S.paper) {
@@ -1185,63 +1204,6 @@ async function renderCompare() {
   if (b) b.onclick = () => run(async () => { await api.post("/api/compare", { keys: sel }); toast("비교표를 만드는 중입니다 (몇 분)."); pollJobs(); });
 }
 
-let mermaidReady = null;
-function loadMermaid() {
-  if (!mermaidReady) mermaidReady = new Promise((res, rej) => {
-    const s = document.createElement("script");
-    s.src = "/vendor/mermaid.min.js";
-    s.onload = () => { mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "base", fontFamily: "Pretendard, sans-serif",
-      flowchart: { useMaxWidth: false, nodeSpacing: 40, rankSpacing: 70, padding: 14 },
-      themeVariables: { primaryColor: "#ffffff", primaryBorderColor: "#d2d2d7", lineColor: "#9a9aa0", fontSize: "17px" } }); res(); };
-    s.onerror = rej;
-    document.head.appendChild(s);
-  });
-  return mermaidReady;
-}
-window.openPaperFromGraph = (key) => { setView("paper"); openPaper(key); };
-
-async function renderLineage() {
-  const main = $("#main");
-  const d = (await api.get("/api/lineage")).lineage;
-  if (S.view !== "lineage") return;
-  const busy = S.jobs.some((j) => j.kind === "lineage" && ["queued", "running"].includes(j.status));
-  main.innerHTML = `<div class="wrap">${backBtn()}
-    <div class="callout"><div><b>Task 계보도</b><p>라이브러리 논문들의 해설(연구 흐름 · 관련 논문)을 모아 Task 별 계보를 그리고, 다음에 읽을 논문을 추천합니다. 파란 칸 = 내 라이브러리 (누르면 열림).</p></div>
-    <div style="display:flex;gap:8px">${d && !busy ? '<button class="btn danger" id="linDel">삭제</button>' : ""}${busy ? '<span class="spinner"></span>' : `<button class="btn primary" id="linBtn">${d ? "다시 만들기" : "계보도 만들기"}</button>`}</div></div>
-    <div id="linBody">${d ? "" : '<div class="muted">아직 계보도가 없습니다.</div>'}</div></div>`;
-  const ld = $("#linDel");
-  if (ld) ld.onclick = () => { if (confirm("계보도를 지울까요?")) run(async () => { await api.post("/api/lineage/delete"); renderLineage(); }); };
-  const b = $("#linBtn");
-  if (b) b.onclick = () => run(async () => { await api.post("/api/lineage"); toast("계보도를 만드는 중입니다 (몇 분)."); pollJobs(); renderLineage(); });
-  if (!d) return;
-  const body = $("#linBody");
-  body.innerHTML = d.tasks.map((t, i) => `<div class="card"><h2>${esc(t.name)}</h2><div class="md muted" style="margin-bottom:12px">${md(t.summary)}</div><div class="graph-tools" data-g="${i}"><button class="btn pearl sm" data-z="-">－</button><span class="zoom" id="lz-${i}">100%</span><button class="btn pearl sm" data-z="+">＋</button><button class="btn pearl sm" data-z="fit">맞춤</button><button class="btn pearl sm" data-z="big">크게 보기</button></div><div class="lineage-graph" id="lg-${i}"></div></div>`).join("")
-    + (d.recommendations.length ? `<div class="card"><h2>다음에 읽을 논문</h2>${d.recommendations.map((r) => `<div class="related"><div class="r"><span class="nm">${r.url ? `<a href="${esc(r.url)}" target="_blank">${esc(r.title)}</a>` : esc(r.title)}</span> <span class="muted small">${esc(r.venue || "")} ${esc(r.year || "")}</span> ${r.verified ? '<span class="pill green">확인</span>' : '<span class="pill amber">미확인</span>'}<div class="df">${inl(r.why)}</div></div></div>`).join("")}</div>` : "")
-    + `<div class="muted small" style="text-align:right">${esc(d.created)} · 논문 ${d.keys.length}편 기준</div>`;
-  await loadMermaid();
-  for (let i = 0; i < d.tasks.length; i++) {
-    const t = d.tasks[i];
-    const safe = (s) => String(s || "").replace(/["\[\]{}()<>|#;]/g, " ").trim();
-    const ids = new Set(t.nodes.map((n) => n.id));
-    const lines = ["flowchart LR"];
-    for (const n of t.nodes) lines.push(`  ${n.id.replace(/\W/g, "_")}["<b>${safe(n.title)}</b><br/><small>${safe(n.venue)} ${safe(n.year)}</small>"]`);
-    for (const e of t.edges) if (ids.has(e.from) && ids.has(e.to)) lines.push(`  ${e.from.replace(/\W/g, "_")} -->${e.label ? `|${safe(e.label)}|` : ""} ${e.to.replace(/\W/g, "_")}`);
-    const mine = t.nodes.filter((n) => n.key);
-    if (mine.length) {
-      lines.push("  classDef mine fill:#e8f1fc,stroke:#0071e3,stroke-width:2px,color:#0062c4");
-      lines.push(`  class ${mine.map((n) => n.id.replace(/\W/g, "_")).join(",")} mine`);
-      for (const n of mine) lines.push(`  click ${n.id.replace(/\W/g, "_")} call openPaperFromGraph("${n.key}")`);
-    }
-    try {
-      const { svg, bindFunctions } = await mermaid.render("lgsvg" + i + Date.now(), lines.join("\n"));
-      const box = $("#lg-" + i);
-      box.innerHTML = `<div class="gwrap">${svg}</div>`;
-      setGraphZoom(i, 1);
-      if (bindFunctions) bindFunctions(box);
-    } catch (e) { $("#lg-" + i).innerHTML = `<div class="muted small">그래프를 그리지 못했습니다: ${esc(e.message)}</div>`; }
-  }
-}
-
 async function renderGlobal() {
   const main = $("#main");
   const items = (await api.get("/api/global-qa")).items;
@@ -1319,7 +1281,6 @@ async function pollJobs() {
       if (j.key === S.key) refreshPaper = true;
       refreshLib = true;
       S.pendingAsks = S.pendingAsks.filter((p) => p.job !== j.id);
-      if (j.kind === "lineage" && S.view === "lineage") renderLineage();
       if (j.kind === "compare" && S.view === "compare") renderCompare();
       if (j.kind === "global" && S.view === "global") renderGlobal();
     }
@@ -1369,37 +1330,7 @@ function renderJobsPop() {
   }).join("") : '<div class="muted small" style="padding:12px">최근 작업이 없습니다.</div>') + usage;
 }
 
-// 계보도 확대: svg 의 본래 크기(viewBox)에 배율을 곱해 폭을 정함 → 스크롤도 자연스럽게
-const graphZoom = {};
-function setGraphZoom(i, z, box) {
-  box = box || $("#lg-" + i);
-  const svg = box && box.querySelector("svg");
-  if (!svg) return;
-  const vb = (svg.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
-  const w = vb[2] || svg.getBBox().width;
-  if (z === "fit") z = Math.max(0.3, Math.min(2, (box.clientWidth - 24) / w));
-  z = Math.max(0.3, Math.min(3, z));
-  graphZoom[i] = z;
-  svg.style.width = Math.round(w * z) + "px";
-  svg.style.height = "auto";
-  const lab = $("#lz-" + i);
-  if (lab) lab.textContent = Math.round(z * 100) + "%";
-}
 document.addEventListener("click", async (e) => {
-  const zb = e.target.closest(".graph-tools [data-z]");
-  if (zb) {
-    const i = zb.closest(".graph-tools").dataset.g, z = graphZoom[i] || 1, a = zb.dataset.z;
-    if (a === "big") {
-      modal(`<div style="display:flex;align-items:center;gap:8px"><h3 style="margin:0">계보도</h3><span style="flex:1"></span><button class="btn pearl sm" data-mz="-">－</button><button class="btn pearl sm" data-mz="+">＋</button><button class="btn primary sm" data-close>닫기</button></div><div class="lineage-graph" id="lgBig" style="margin-top:10px">${$("#lg-" + i).innerHTML}</div>`);
-      $("#modalBody").className = "modal graph";
-      let mzv = 1.3;
-      setGraphZoom("big", mzv, $("#lgBig"));
-      $("#modalBody").onclick = (ev) => { const m = ev.target.closest("[data-mz]"); if (m) { mzv = m.dataset.mz === "+" ? mzv * 1.25 : mzv / 1.25; setGraphZoom("big", mzv, $("#lgBig")); } };
-      return;
-    }
-    setGraphZoom(i, a === "fit" ? "fit" : a === "+" ? z * 1.25 : z / 1.25);
-    return;
-  }
   const dc = e.target.closest("[data-delcmp]");
   if (dc) {
     if (!confirm("이 비교표를 지울까요?")) return;
@@ -1556,7 +1487,7 @@ async function boot() {
   if (S.key && !S.papers.some((p) => p.key === S.key)) S.key = null;
   if (!S.key && S.papers.length) S.key = S.papers[0].key;
   if (S.key) await openPaper(S.key, { block: qs.get("block") || undefined, instant: true }); else renderMain();
-  if (["compare", "lineage", "global"].includes(qs.get("view"))) setView(qs.get("view"));
+  if (["compare", "global"].includes(qs.get("view"))) setView(qs.get("view"));
   pollJobs();
   setInterval(() => api.get("/api/ping").catch(() => {}), 5000);
   $("#reloadBtn").onclick = () => run(async () => { S.libSig = null; await loadLibrary(); toast("목록을 새로 고쳤습니다."); });
