@@ -51,6 +51,11 @@ const MATH_RE = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|(?<![\\$\w])\$(?!\s)([^\n
 function tex(m, display) {
   try { return katex.renderToString(m, { displayMode: display, throwOnError: false, strict: "ignore" }); } catch (e) { return esc(m); }
 }
+// 짝이 맞는 **굵게** 를 직접 바꿈: 마크다운 규칙은 "…(path)**해" 처럼 닫는 ** 앞이 문장부호이고 뒤에 한글이 붙으면
+// 굵게로 인정하지 않아(조사가 붙는 한국어에서 자주 실패) 별표가 그대로 보이므로, 남은 짝은 여기서 처리
+function fixBold(html) {
+  return html.replace(/\*\*(?=\S)([^*<>\n]+?)\*\*/g, "<strong>$1</strong>");
+}
 function md(text) {
   if (!text) return "";
   const store = [];
@@ -58,20 +63,18 @@ function md(text) {
     store.push(a !== undefined ? [a, true] : b !== undefined ? [b, true] : [c, false]);
     return "@@M" + (store.length - 1) + "@@";
   });
-  const html = marked.parse(src, { gfm: true, breaks: false });
+  const html = fixBold(marked.parse(src, { gfm: true, breaks: false }));
   return html.replace(/@@M(\d+)@@/g, (_, i) => tex(store[+i][0], store[+i][1]));
 }
 function inl(text) {
-  // 원문·번역 문단: 마크다운 없이, 수식만 그림
+  // 짧은 글 · 원문·번역 문단: 마크다운 문법 없이, 수식과 **굵게** 만 그림 (수식을 먼저 떼어 두어 수식 안의 * 는 건드리지 않음)
   if (!text) return "";
-  let out = "", last = 0;
-  String(text).replace(MATH_RE, (all, a, b, c, off) => {
-    out += esc(text.slice(last, off));
-    out += a !== undefined ? tex(a, true) : b !== undefined ? tex(b, true) : tex(c, false);
-    last = off + all.length;
-    return all;
+  const store = [];
+  const src = String(text).replace(MATH_RE, (all, a, b, c) => {
+    store.push(a !== undefined ? [a, true] : b !== undefined ? [b, true] : [c, false]);
+    return "@@M" + (store.length - 1) + "@@";
   });
-  return out + esc(text.slice(last));
+  return fixBold(esc(src)).replace(/@@M(\d+)@@/g, (_, i) => tex(store[+i][0], store[+i][1]));
 }
 
 // 토큰 수 짧게: 1234 → 1.2K, 1234567 → 1.23M
