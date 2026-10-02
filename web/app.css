@@ -517,3 +517,20 @@ body.dragging-paper .fold-empty, .fold-b:only-child .fold-empty { display: block
 html { overflow: auto; }
 body { min-width: 1200px; min-height: 700px; }
 .shell { min-height: 640px; }
+
+/* 제목 아래 정보: 저자 · 소속 · 게재처 */
+.pinfo { margin-top: 2px; display: flex; flex-direction: column; gap: 5px; }
+.pinfo .authors { color: var(--ink2); font-size: 14px; }
+.pinfo .authors sup, .pinfo .affil sup { color: var(--accent); font-weight: 700; font-size: 10px; margin: 0 1px; }
+.pinfo .affil { color: var(--muted); font-size: 13px; }
+.pinfo .venue { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink2); }
+.pinfo .venue .links { color: var(--muted); }
+/* 비교표 접기 */
+details.cmp { padding: 0; overflow: hidden; }
+details.cmp > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 16px 22px; }
+details.cmp > summary::-webkit-details-marker { display: none; }
+details.cmp > summary:hover { background: var(--hover-row); }
+details.cmp > summary .chev { width: 18px; height: 18px; flex: none; color: var(--muted); transition: transform .2s; }
+details.cmp[open] > summary .chev { transform: rotate(90deg); }
+details.cmp > summary .ttl { flex: 1; min-width: 0; font-weight: 700; font-size: 16px; }
+details.cmp .cmp-body { padding: 4px 22px 22px; }

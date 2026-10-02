@@ -51,9 +51,28 @@ def analyze(key, progress=_noop):
             m["num_pages"] = len(pages)
         library.save_meta(m)
     library.merge_glossary(key, d.get("glossary", []))
+    try:   # 저자·소속·게재처도 바로 (실패해도 분석은 끝난 것으로)
+        meta_info(key)
+    except claude.ClaudeError:
+        pass
     progress(2, 2, "분석 완료")
     exporter.export(key)
     return m
+
+
+def meta_info(key, progress=_noop):
+    """저자 · 소속 · 게재처를 첫 1~2쪽에서 뽑아 meta.json 에 더합니다 (입력 몇천 토큰)."""
+    m = library.load_meta(key)
+    pages = library.ensure_pages(key)
+    text = "\n\n".join(pages[:2])[:7000] if pages else None
+    progress(0, 1, "저자·소속·게재처 확인 중")
+    res = claude.run(prompts.meta_info(m, text, library.rel_pdf(m)), "meta", prompts.META_SCHEMA,
+                     tools=() if text else ("Read",), key=key)
+    d = res["data"]
+    library.update_meta(key, authors_detail=d.get("authors_detail", []), affiliations=d.get("affiliations", []),
+                        venue_full=d.get("venue_full", ""), pub_status=d.get("status", "unknown"))
+    progress(1, 1, "완료")
+    exporter.export(key)
 
 
 # ---------- 2. 번역 ----------

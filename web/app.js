@@ -298,6 +298,12 @@ async function reloadPaper(keepScroll = true) {
   }
   if (seq !== reloadSeq || key !== S.key) return;   // 그사이 다른 논문을 골랐으면 늦게 온 응답은 버림
   S.paper = got.paper;
+  S.metaAsked = S.metaAsked || {};
+  const mm = got.paper.meta;
+  if (mm.status !== "new" && !("affiliations" in mm) && !S.metaAsked[key]) {
+    S.metaAsked[key] = true;
+    api.post(`/api/paper/${encodeURIComponent(key)}/meta`).then(() => pollJobs()).catch(() => {});
+  }
   if (got.units) S.units = got.units;
   renderMain();
   renderRecent();
@@ -341,6 +347,26 @@ function renderMain() {
   ({ overview: renderOverview, reader: renderReader, qa: renderQaTab, glossary: renderGlossary, memos: renderMemos, code: renderCode, slides: renderSlides }[S.tab] || renderOverview)(body);
 }
 
+// 제목 아래: 저자(소속 번호) · 소속 · 게재처 · 링크 (해설의 한 줄 요약과 겹치지 않게)
+const PUB = { published: ["게재", "green"], accepted: ["채택", "green"], preprint: ["프리프린트", "amber"], unknown: ["게재 정보 없음", "gray"] };
+function paperInfoHtml(m, authorsFallback) {
+  const det = m.authors_detail || [];
+  const aff = m.affiliations || [];
+  const multi = aff.length > 1;
+  const authors = det.length
+    ? det.slice(0, 12).map((a) => esc(a.name) + (multi && (a.affiliations || []).length ? `<sup>${a.affiliations.join(",")}</sup>` : "")).join(", ") + (det.length > 12 ? " 외" : "")
+    : esc(authorsFallback);
+  const affHtml = aff.length ? `<div class="affil">${aff.map((x, i) => (multi ? `<sup>${i + 1}</sup>` : "") + esc(x)).join(" · ")}</div>` : "";
+  const st = PUB[m.pub_status];
+  const links = [];
+  if (m.arxiv_id) links.push(`<a href="https://arxiv.org/abs/${esc(m.arxiv_id)}" target="_blank">arXiv ${esc(m.arxiv_id)}</a>`);
+  if (m.code_url) links.push(`<a href="${esc(/^https?:/.test(m.code_url) ? m.code_url : "https://" + m.code_url)}" target="_blank">코드·프로젝트</a>`);
+  const venue = m.venue_full || [m.venue, m.year].filter(Boolean).join(" ");
+  const venueHtml = venue || links.length ? `<div class="venue">${st ? `<span class="pill ${st[1]}">${st[0]}</span>` : ""}${venue ? `<span>${esc(venue)}</span>` : ""}${links.length ? `<span class="links">${links.join(" · ")}</span>` : ""}</div>` : "";
+  const loading = m.status !== "new" && !("affiliations" in m) ? `<div class="muted small">소속·게재처를 확인하는 중…</div>` : "";
+  return `<div class="pinfo">${authors ? `<div class="authors">${authors}</div>` : ""}${affHtml}${venueHtml}${loading}</div>`;
+}
+
 function headerHtml(p) {
   const m = p.meta;
   const [done, total] = p.progress;
@@ -372,8 +398,7 @@ function headerHtml(p) {
       <div class="seg" id="readingSeg">${Object.entries(READING).map(([k, v]) => `<button data-r="${k}" class="${(m.reading || "todo") === k ? "on" : ""}">${v}</button>`).join("")}</div>
     </div>
     <h1>${esc(m.title)}</h1>
-    ${authors ? `<div class="authors">${esc(authors)}</div>` : ""}
-    ${p.overview ? `<div class="one">${inl(p.overview.one_liner)}</div>` : m.abstract_ko ? `<div class="one">${inl(m.abstract_ko)}</div>` : ""}
+    ${paperInfoHtml(m, authors)}
     <div class="actions">${actions.join("")}</div>
     ${total ? `<div class="prog"><span>번역 ${done}/${total}</span><div class="bar ${pct === 100 ? "done" : ""}"><i style="width:${pct}%"></i></div><span>${usageText(p.usage)}</span></div>` : ""}
     ${busy.map((j) => `<div class="pending" style="margin-top:10px"><span class="spinner"></span><b>${esc(j.label)}</b><span>${esc(j.message || "")}${j.n ? ` (${j.i}/${j.n})` : ""}</span>${j.kind === "translate" ? `<button class="btn ghost sm" data-stop="${j.id}" style="margin-left:auto">멈추기</button>` : ""}</div>`).join("")}
@@ -1196,10 +1221,10 @@ async function renderCompare() {
   main.innerHTML = `<div class="wrap">${backBtn()}
     <div class="callout"><div><b>논문 비교표</b><p>왼쪽 목록에서 비교할 논문을 두 편 이상 고르세요 (해설이 있는 논문일수록 정확합니다).${sel.length ? "<br>선택: " + names.map(esc).join(", ") : ""}</p></div>
     <button class="btn primary" id="cmpBtn" ${sel.length < 2 ? "disabled" : ""}>비교표 만들기 (${sel.length}편)</button></div>
-    ${items.map((c) => `<div class="card"><h2>${esc(c.title)}<span style="flex:1"></span><button class="btn danger sm" data-delcmp="${esc(c.id)}">삭제</button></h2><div class="muted small" style="margin:-6px 0 12px">${esc(c.created)}</div>
+    ${items.map((c, i) => `<details class="card cmp" ${i === 0 ? "open" : ""}><summary>${CHEV}<span class="ttl">${esc(c.title)}</span><span class="muted small">${fmtTs(c.created)}</span><button class="btn danger sm" data-delcmp="${esc(c.id)}">삭제</button></summary><div class="cmp-body">
       <div class="tbl-wrap"><table class="tbl"><tr><th></th>${c.columns.map((x) => `<th>${esc(x)}</th>`).join("")}</tr>
       ${c.rows.map((r) => `<tr><td><b>${esc(r.aspect)}</b></td>${r.values.map((v) => `<td>${inl(v)}</td>`).join("")}</tr>`).join("")}</table></div>
-      <div class="md" style="margin-top:14px">${md(c.summary)}</div></div>`).join("")}</div>`;
+      <div class="md" style="margin-top:14px">${md(c.summary)}</div></div></details>`).join("")}</div>`;
   const b = $("#cmpBtn");
   if (b) b.onclick = () => run(async () => { await api.post("/api/compare", { keys: sel }); toast("비교표를 만드는 중입니다 (몇 분)."); pollJobs(); });
 }
@@ -1333,6 +1358,7 @@ function renderJobsPop() {
 document.addEventListener("click", async (e) => {
   const dc = e.target.closest("[data-delcmp]");
   if (dc) {
+    e.preventDefault();   // 제목 줄의 삭제를 눌러도 접힘이 바뀌지 않게
     if (!confirm("이 비교표를 지울까요?")) return;
     await run(async () => { await api.post("/api/comparisons/delete", { id: dc.dataset.delcmp }); renderCompare(); });
     return;

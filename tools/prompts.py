@@ -281,3 +281,29 @@ Grep / Read 로 필요한 것을 찾아 답하세요.
 
 - title: 한 줄 제목, answer: 마크다운 답 (근거 논문을 [key] §위치 로 표시), papers: 답에 쓴 논문 key 목록.
 """.format(catalog=catalog, q=question)
+
+
+# ---------- 저자 · 소속 · 게재처 (첫 1~2쪽만 읽음) ----------
+META_SCHEMA = obj({
+    "authors_detail": arr(obj({"name": S, "affiliations": {"type": "array", "items": {"type": "integer"}}})),
+    "affiliations": SA,
+    "venue_full": S,
+    "status": {"type": "string", "enum": ["published", "accepted", "preprint", "unknown"]},
+})
+
+
+def meta_info(meta, text, pdf_rel):
+    src = ("<first_pages>\n" + text + "\n</first_pages>") if text else "PDF `{}` 의 1~2쪽을 Read 도구(pages 인자)로 읽으세요.".format(pdf_rel)
+    return HEAD + """작업: 논문 첫 부분에서 저자 · 소속 · 게재처 뽑기
+
+논문: {title} (지금 알고 있는 학회 표기: {venue} {year}, arXiv: {arxiv})
+{src}
+
+- authors_detail: 저자 전원을 순서대로. affiliations 는 아래 affiliations 목록의 번호(1부터)들. 소속을 알 수 없으면 [].
+- affiliations: 소속 기관 목록 (저자 각주의 순서대로, 학교·회사 이름만 간결하게, 예: "RWTH Aachen University", "NVIDIA").
+- venue_full: 게재처의 정식 이름 + 연도 (예: "IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) 2025",
+  "European Conference on Computer Vision (ECCV) 2026"). 첫 쪽의 학회 표기·저작권 줄·각주("Accepted to ...")에서 찾고,
+  학회·저널 표시가 없고 arXiv 에만 있으면 "arXiv preprint (YYYY)".
+- status: 학회·저널에 실림 = published, 채택 표기만 있음 = accepted, arXiv 등 미게재 = preprint, 모르겠으면 unknown.
+- 적혀 있지 않은 정보는 지어내지 말고 비워 두세요.
+""".format(title=meta.get("title"), venue=meta.get("venue") or "-", year=meta.get("year") or "", arxiv=meta.get("arxiv_id") or "-", src=src)

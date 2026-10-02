@@ -205,6 +205,12 @@ def post_analyze(h, q, body, key):
     return _job("analyze", key, "분석 · " + _name(key), lambda p, s: pipeline.analyze(key, p) and None)
 
 
+@route("POST", r"/api/paper/([^/]+)/meta")
+def post_meta(h, q, body, key):
+    _key(key)
+    return _job("meta", key, "저자·소속 · " + _name(key), lambda p, s: pipeline.meta_info(key, p) and None)
+
+
 @route("POST", r"/api/paper/([^/]+)/overview")
 def post_overview(h, q, body, key):
     _key(key)
