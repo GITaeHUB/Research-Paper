@@ -63,7 +63,10 @@ function md(text) {
     store.push(a !== undefined ? [a, true] : b !== undefined ? [b, true] : [c, false]);
     return "@@M" + (store.length - 1) + "@@";
   });
-  const html = fixBold(marked.parse(src, { gfm: true, breaks: false }));
+  // 물결표 하나(~)는 글자 그대로: GFM 은 ~ 두 개 사이를 취소선으로 처리해서 "p.3~5 … §3.2~3.3" 사이 글이 줄 그어짐.
+  // 한국어는 범위를 ~ 로 많이 쓰므로 ~~두 개~~ 일 때만 취소선으로 둠
+  const guarded = src.replace(/(^|[^~])~(?!~)/g, "$1@@TILDE@@");
+  const html = fixBold(marked.parse(guarded, { gfm: true, breaks: false })).replace(/@@TILDE@@/g, "~");
   return html.replace(/@@M(\d+)@@/g, (_, i) => tex(store[+i][0], store[+i][1]));
 }
 function inl(text) {

@@ -211,6 +211,31 @@ def slides_md(key):
 
 
 # ---------- 내보내기 ----------
+_MATH_OR_CODE = re.compile(r"(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|`[^`\n]+`)")
+_SINGLE_TILDE = re.compile(r"(?<![~\\])~(?!~)")
+
+
+def guard_tilde(text):
+    """물결표 하나(~)를 \\~ 로: 마크다운 뷰어(GFM)는 ~ 두 개 사이를 취소선으로 처리해서
+    "p.3~5 … §3.2~3.3" 사이 글이 줄 그어집니다. 코드 블록 · 수식(LaTeX 의 ~ 는 띄어쓰기) 안은 그대로 둡니다."""
+    out, in_fence = [], False
+    for line in text.split("\n"):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        parts = _MATH_OR_CODE.split(line)
+        out.append("".join(p if i % 2 else _SINGLE_TILDE.sub(r"\\~", p) for i, p in enumerate(parts)))
+    return "\n".join(out)
+
+
+def _write_md(path, text):
+    write_text(path, guard_tilde(text))
+
+
 def export(key):
     m = library.load_meta(key)
     if not m:
@@ -222,13 +247,13 @@ def export(key):
             shutil.move(str(config.EXPORTS / old), str(d))
         if old != d.name:
             library.update_meta(key, export_dir=d.name)
-    write_text(d / "해설.md", overview_md(key))
-    write_text(d / "원문·번역.md", translation_md(key))
-    write_text(d / "Q&A.md", qa_md(key))
+    _write_md(d / "해설.md", overview_md(key))
+    _write_md(d / "원문·번역.md", translation_md(key))
+    _write_md(d / "Q&A.md", qa_md(key))
     s = slides_md(key)
     if s:
-        write_text(d / "발표요약.md", "# 발표 요약 · {}\n\n{}".format(display_name(m), s))
+        _write_md(d / "발표요약.md", "# 발표 요약 · {}\n\n{}".format(display_name(m), s))
     c = code_md(key)
     if c:
-        write_text(d / "코드.md", c)
+        _write_md(d / "코드.md", c)
     return d
